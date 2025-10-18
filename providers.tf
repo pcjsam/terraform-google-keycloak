@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.38.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "~>1.19.0"
+    }
     postgresql = {
       source  = "cyrilgdn/postgresql"
       version = "~> 1.22.0"

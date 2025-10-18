@@ -307,6 +307,70 @@ resource "google_service_account_iam_member" "keycloak_ksa_iam" {
 
 /*
 ** ******************************************************
+** Keycloak - CRDs Installation
+** ******************************************************
+*/
+
+resource "kubectl_manifest" "keycloak_crd" {
+  yaml_body = file("https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloaks.k8s.keycloak.org-v1.yml")
+
+  wait_for {
+    field {
+      key   = "status.conditions[?(@.type=='Established')].status"
+      value = "True"
+    }
+  }
+
+  timeouts {
+    create = "1m"
+  }
+}
+
+resource "kubectl_manifest" "keycloak_realm_import_crd" {
+  yaml_body = file("https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml")
+
+  wait_for {
+    field {
+      key   = "status.conditions[?(@.type=='Established')].status"
+      value = "True"
+    }
+  }
+
+  timeouts {
+    create = "1m"
+  }
+}
+
+/*
+** ******************************************************
+** Keycloak - Operator Deployment
+** ******************************************************
+*/
+
+resource "kubectl_manifest" "keycloak_operator" {
+  yaml_body = file("https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/kubernetes.yml")
+
+  override_namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
+
+  wait_for {
+    field {
+      key   = "status.conditions[?(@.type=='Available')].status"
+      value = "True"
+    }
+  }
+
+  timeouts {
+    create = "5m"
+  }
+
+  depends_on = [
+    kubectl_manifest.keycloak_crd,
+    kubectl_manifest.keycloak_realm_import_crd
+  ]
+}
+
+/*
+** ******************************************************
 ** Keycloak - Bootstrap Admin Secret
 ** ******************************************************
 */
@@ -451,7 +515,8 @@ resource "kubernetes_manifest" "keycloak_instance" {
 
   depends_on = [
     kubernetes_manifest.keycloak_bootstrap_admin_secret,
-    kubernetes_manifest.keycloak_db_secret
+    kubernetes_manifest.keycloak_db_secret,
+    kubectl_manifest.keycloak_operator,
   ]
 }
 
