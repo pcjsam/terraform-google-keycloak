@@ -59,6 +59,17 @@ output "cloud_sql_database_username" {
 
 /* 
 ** ******************************************************
+** Keycloak - Cluster
+** ******************************************************
+*/
+
+output "keycloak_cluster_name" {
+  description = "Keycloak GKE cluster name"
+  value       = google_container_cluster.keycloak_cluster.name
+}
+
+/* 
+** ******************************************************
 ** Keycloak - GCP Service Account
 ** ******************************************************
 */
@@ -66,4 +77,15 @@ output "cloud_sql_database_username" {
 output "keycloak_gcp_service_account_email" {
   description = "Keycloak GCP service account email"
   value       = google_service_account.keycloak_gsa.email
+}
+
+/* 
+** ******************************************************
+** Keycloak - Ingress
+** ******************************************************
+*/
+
+output "keycloak_ingress_public_ip" {
+  description = "Keycloak Ingress public IP address"
+  value       = google_compute_global_address.public_ip_address.address
 }
