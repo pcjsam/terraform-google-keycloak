@@ -58,6 +58,10 @@ terraform {
       source  = "cyrilgdn/postgresql"
       version = "~> 1.22.0"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.5.0"
+    }
   }
 }
 ```
@@ -114,6 +118,10 @@ provider "postgresql" {
   username    = module.keycloak.cloud_sql_database_username
   password    = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
   superuser   = false
+}
+
+provider "http" {
+  # No configuration required - used to fetch remote YAML manifests
 }
 ```
 

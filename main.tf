@@ -311,34 +311,24 @@ resource "google_service_account_iam_member" "keycloak_ksa_iam" {
 ** ******************************************************
 */
 
+data "http" "keycloak_crd" {
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloaks.k8s.keycloak.org-v1.yml"
+}
+
 resource "kubectl_manifest" "keycloak_crd" {
-  yaml_body = file("https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloaks.k8s.keycloak.org-v1.yml")
+  yaml_body = data.http.keycloak_crd.response_body
 
-  wait_for {
-    field {
-      key   = "status.conditions[?(@.type=='Established')].status"
-      value = "True"
-    }
-  }
+  wait_for_rollout = false
+}
 
-  timeouts {
-    create = "1m"
-  }
+data "http" "keycloak_realm_import_crd" {
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml"
 }
 
 resource "kubectl_manifest" "keycloak_realm_import_crd" {
-  yaml_body = file("https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml")
+  yaml_body = data.http.keycloak_realm_import_crd.response_body
 
-  wait_for {
-    field {
-      key   = "status.conditions[?(@.type=='Established')].status"
-      value = "True"
-    }
-  }
-
-  timeouts {
-    create = "1m"
-  }
+  wait_for_rollout = false
 }
 
 /*
@@ -347,21 +337,16 @@ resource "kubectl_manifest" "keycloak_realm_import_crd" {
 ** ******************************************************
 */
 
+data "http" "keycloak_operator" {
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/kubernetes.yml"
+}
+
 resource "kubectl_manifest" "keycloak_operator" {
-  yaml_body = file("https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/kubernetes.yml")
+  yaml_body = data.http.keycloak_operator.response_body
 
   override_namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
 
-  wait_for {
-    field {
-      key   = "status.conditions[?(@.type=='Available')].status"
-      value = "True"
-    }
-  }
-
-  timeouts {
-    create = "5m"
-  }
+  wait_for_rollout = true
 
   depends_on = [
     kubectl_manifest.keycloak_crd,

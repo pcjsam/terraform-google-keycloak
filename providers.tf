@@ -18,5 +18,9 @@ terraform {
       source  = "cyrilgdn/postgresql"
       version = "~> 1.22.0"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.5.0"
+    }
   }
 }
