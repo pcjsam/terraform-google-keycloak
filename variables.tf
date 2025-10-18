@@ -319,6 +319,11 @@ variable "keycloak_image_project_id" {
   description = "The GCP project ID where the Keycloak container image is hosted"
 }
 
+variable "keycloak_image" {
+  type        = string
+  description = "The Keycloak container image to use"
+}
+
 variable "keycloak_cluster_name" {
   type        = string
   description = "The name of the Keycloak GKE cluster"
@@ -387,6 +392,41 @@ variable "keycloak_k8s_service_account_name" {
   type        = string
   description = "The name of the Keycloak Kubernetes service account"
   default     = "keycloak-ksa"
+}
+
+/*
+** ******************************************************
+** Keycloak - Bootstrap Admin Secret
+** ******************************************************
+*/
+
+variable "keycloak_bootstrap_admin_secret_name" {
+  type        = string
+  description = "The name of the Keycloak bootstrap admin secret"
+  default     = "bootstrap-admin-secret"
+}
+
+/*
+** ******************************************************
+** Keycloak - Database Secret
+** ******************************************************
+*/
+
+variable "keycloak_db_secret_name" {
+  type        = string
+  description = "The name of the Keycloak database secret"
+  default     = "db-secret"
+}
+
+/*
+** ******************************************************
+** Keycloak - Instance
+** ******************************************************
+*/
+
+variable "keycloak_image_tag" {
+  type        = string
+  description = "The Keycloak container image tag to use"
 }
 
 /* 

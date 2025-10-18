@@ -305,6 +305,156 @@ resource "google_service_account_iam_member" "keycloak_ksa_iam" {
   member             = "serviceAccount:${var.project}.svc.id.goog[${kubernetes_namespace_v1.keycloak_namespace.metadata["name"]}/${kubernetes_service_account_v1.keycloak_ksa.metadata[0].name}]"
 }
 
+/*
+** ******************************************************
+** Keycloak - Bootstrap Admin Secret
+** ******************************************************
+*/
+
+resource "kubernetes_manifest" "keycloak_bootstrap_admin_secret" {
+  count = var.deploy_k8s_resources ? 1 : 0
+  manifest = {
+    apiVersion = "v1"
+    kind       = "Secret"
+    metadata = {
+      name      = var.keycloak_bootstrap_admin_secret_name
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+    }
+    type = "Opaque"
+    stringData = {
+      username = "admin"
+      password = "admin"
+    }
+  }
+}
+
+/*
+** ******************************************************
+** Keycloak - Database Secret
+** ******************************************************
+*/
+
+resource "kubernetes_manifest" "keycloak_db_secret" {
+  count = var.deploy_k8s_resources ? 1 : 0
+  manifest = {
+    apiVersion = "v1"
+    kind       = "Secret"
+    metadata = {
+      name      = var.keycloak_db_secret_name
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+    }
+    type = "Opaque"
+    stringData = {
+      username = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
+      # Dummy password, will not be used thanks to cloud sql auth proxy
+      password = "dummy-password"
+    }
+  }
+}
+
+/*
+** ******************************************************
+** Keycloak - Instance
+** ******************************************************
+*/
+
+resource "kubernetes_manifest" "keycloak_instance" {
+  count = var.deploy_k8s_resources ? 1 : 0
+  manifest = {
+    apiVersion = "k8s.keycloak.org/v2alpha1"
+    kind       = "Keycloak"
+    metadata = {
+      name      = "keycloak"
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+    }
+    spec = {
+      instances = 1
+      image     = var.keycloak_image
+      # This is the secret that will be used to bootstrap the admin user
+      bootstrapAdmin = {
+        user = {
+          secret = var.keycloak_bootstrap_admin_secret_name
+        }
+      }
+      db = {
+        vendor   = "postgres"
+        host     = "127.0.0.1"
+        port     = 5432
+        database = var.db_name
+        usernameSecret = {
+          name = var.keycloak_db_secret_name
+          key  = "username"
+        }
+        passwordSecret = {
+          name = var.keycloak_db_secret_name
+          key  = "password"
+        }
+      }
+      # Hostname false to use an Ingress object
+      hostname = {
+        strict = false
+      }
+      # HTTP true to use an Ingress object
+      http = {
+        httpEnabled = true
+        httpPort    = 8080
+        annotations = {
+          "beta.cloud.google.com/backend-config" = "{\"default\": \"${var.backend_config_name}\"}"
+        }
+      }
+      # Proxy headers to use an Ingress object
+      proxy = {
+        headers = "xforwarded"
+      }
+      additionalOptions = [
+        {
+          name  = "health-enabled"
+          value = "true"
+        },
+        {
+          name  = "metrics-enabled"
+          value = "true"
+        }
+      ]
+      unsupported = {
+        podTemplate = {
+          spec = {
+            serviceAccountName = kubernetes_service_account_v1.keycloak_ksa.metadata[0].name
+            initContainers = [
+              {
+                name          = "cloud-sql-proxy"
+                restartPolicy = "Always"
+                image         = "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1"
+                args = [
+                  "${var.project}:${var.region}:${google_sql_database_instance.postgresql_instance.name}",
+                  "--private-ip",
+                  "--auto-iam-authn",
+                  "--structured-logs",
+                  "--port=5432"
+                ]
+                securityContext = {
+                  runAsNonRoot = true
+                }
+                resources = {
+                  requests = {
+                    memory = "2Gi"
+                    cpu    = "1000m"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_manifest.keycloak_bootstrap_admin_secret,
+    kubernetes_manifest.keycloak_db_secret
+  ]
+}
+
 /* 
 ** ******************************************************
 ** Keycloak - Frontend Configuration
