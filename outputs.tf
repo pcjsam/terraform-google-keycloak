@@ -1,0 +1,69 @@
+/* 
+** ******************************************************
+** Networking - VPC and Subnet
+** ******************************************************
+*/
+
+output "network_id" {
+  description = "The ID of the VPC network"
+  value       = google_compute_network.network.id
+}
+
+output "subnetwork_id" {
+  description = "The ID of the subnetwork"
+  value       = google_compute_subnetwork.subnetwork.id
+}
+
+/* 
+** ******************************************************
+** Database Instance
+** ******************************************************
+*/
+
+output "cloud_sql_connection_name" {
+  description = "Cloud SQL connection name"
+  value       = google_sql_database_instance.postgresql_instance.connection_name
+}
+
+output "cloud_sql_instance_name" {
+  description = "Cloud SQL instance name"
+  value       = google_sql_database_instance.postgresql_instance.name
+}
+
+output "cloud_sql_service_account_email" {
+  description = "Cloud SQL service account email"
+  value       = google_sql_database_instance.postgresql_instance.service_account_email_address
+}
+
+/* 
+** ******************************************************
+** Database
+** ******************************************************
+*/
+
+output "cloud_sql_database_name" {
+  description = "Cloud SQL database name"
+  value       = google_sql_database.postgresql_db.name
+}
+
+/* 
+** ******************************************************
+** Database - User
+** ******************************************************
+*/
+
+output "cloud_sql_database_username" {
+  description = "Cloud SQL user name"
+  value       = google_sql_user.postgresql_user.name
+}
+
+/* 
+** ******************************************************
+** Keycloak - GCP Service Account
+** ******************************************************
+*/
+
+output "keycloak_gcp_service_account_email" {
+  description = "Keycloak GCP service account email"
+  value       = google_service_account.keycloak_gsa.email
+}
