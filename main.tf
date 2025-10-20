@@ -545,6 +545,9 @@ resource "kubernetes_manifest" "keycloak_instance" {
     kubectl_manifest.keycloak_operator,
     kubernetes_manifest.keycloak_bootstrap_admin_secret,
     kubernetes_manifest.keycloak_db_secret,
+    postgresql_grant.keycloak_database_grant,
+    postgresql_grant.keycloak_schema_grant,
+    postgresql_grant_role.keycloak_table_grant,
   ]
 }
 
