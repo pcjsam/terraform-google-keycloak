@@ -234,9 +234,67 @@ resource "google_container_cluster" "keycloak_cluster" {
   }
 }
 
+/*
+** ******************************************************
+** Cluster Readiness Check
+** ******************************************************
+*/
+
+resource "terraform_data" "wait_for_cluster" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for GKE cluster to be ready..."
+
+      # Wait for cluster to be in RUNNING state
+      for i in {1..60}; do
+        STATUS=$(gcloud container clusters describe ${google_container_cluster.keycloak_cluster.name} \
+          --region ${var.region} \
+          --project ${var.project} \
+          --format="value(status)" 2>/dev/null || echo "ERROR")
+
+        if [ "$STATUS" = "RUNNING" ]; then
+          echo "✓ Cluster is in RUNNING state"
+
+          # Additional check: verify API server is responding
+          if gcloud container clusters get-credentials ${google_container_cluster.keycloak_cluster.name} \
+            --region ${var.region} \
+            --project ${var.project} \
+            --quiet 2>/dev/null; then
+
+            # Try to connect to the API server
+            if kubectl cluster-info --request-timeout=5s &>/dev/null; then
+              echo "✓ Cluster API server is accepting connections"
+              exit 0
+            else
+              echo "⏳ API server not ready yet, waiting... (attempt $i/60)"
+            fi
+          fi
+        else
+          echo "⏳ Cluster status: $STATUS, waiting... (attempt $i/60)"
+        fi
+
+        sleep 10
+      done
+
+      echo "✗ ERROR: Cluster did not become ready within 10 minutes"
+      exit 1
+    EOT
+  }
+
+  depends_on = [google_container_cluster.keycloak_cluster]
+}
+
+/*
+** ******************************************************
+** Data Sources for Provider Configuration
+** ******************************************************
+*/
+
 data "google_container_cluster" "keycloak_cluster" {
   name     = google_container_cluster.keycloak_cluster.name
   location = google_container_cluster.keycloak_cluster.location
+
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 data "google_client_config" "current" {}
@@ -318,7 +376,7 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
     name = var.keycloak_namespace_name
   }
 
-  depends_on = [google_container_cluster.keycloak_cluster]
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 /* 
@@ -337,7 +395,7 @@ resource "kubernetes_service_account_v1" "keycloak_ksa" {
     }
   }
 
-  depends_on = [google_container_cluster.keycloak_cluster]
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 resource "google_service_account_iam_member" "keycloak_ksa_iam" {
@@ -361,7 +419,7 @@ resource "kubectl_manifest" "keycloak_crd" {
 
   wait_for_rollout = false
 
-  depends_on = [google_container_cluster.keycloak_cluster]
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 data "http" "keycloak_realm_import_crd" {
@@ -373,7 +431,7 @@ resource "kubectl_manifest" "keycloak_realm_import_crd" {
 
   wait_for_rollout = false
 
-  depends_on = [google_container_cluster.keycloak_cluster]
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 /*
@@ -421,7 +479,7 @@ resource "kubernetes_manifest" "keycloak_bootstrap_admin_secret" {
     }
   }
 
-  depends_on = [google_container_cluster.keycloak_cluster]
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 /*
@@ -447,7 +505,7 @@ resource "kubernetes_manifest" "keycloak_db_secret" {
     }
   }
 
-  depends_on = [google_container_cluster.keycloak_cluster]
+  depends_on = [terraform_data.wait_for_cluster]
 }
 
 /*
