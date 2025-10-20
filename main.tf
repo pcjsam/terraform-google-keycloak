@@ -153,7 +153,7 @@ resource "google_project_iam_member" "cloud_sql_instance_users" {
   role     = "roles/cloudsql.instanceUser"
 }
 
-resource "google_sql_user" "postgres_users" {
+resource "google_sql_user" "postgresql_users" {
   for_each = setunion(var.db_read_users, var.db_write_users)
   instance = google_sql_database_instance.postgresql_instance.name
   name     = each.value
@@ -167,7 +167,7 @@ resource "postgresql_grant" "postgres_grants" {
   privileges  = ["CONNECT"]
   role        = each.value
 
-  depends_on = [google_sql_user.postgres_users]
+  depends_on = [google_sql_user.postgresql_user]
 }
 
 resource "postgresql_grant_role" "read" {
@@ -175,7 +175,7 @@ resource "postgresql_grant_role" "read" {
   role       = each.value
   grant_role = "pg_read_all_data"
 
-  depends_on = [google_sql_user.postgres_users]
+  depends_on = [google_sql_user.postgresql_user]
 }
 
 resource "postgresql_grant_role" "write" {
@@ -183,7 +183,7 @@ resource "postgresql_grant_role" "write" {
   role       = each.value
   grant_role = "pg_write_all_data"
 
-  depends_on = [google_sql_user.postgres_users]
+  depends_on = [google_sql_user.postgresql_user]
 }
 
 /* 
@@ -253,6 +253,8 @@ resource "postgresql_grant" "keycloak_database_grant" {
   object_type = "database"
   privileges  = ["CONNECT"]
   role        = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
+
+  depends_on = [google_sql_user.postgresql_user]
 }
 
 resource "postgresql_grant" "keycloak_schema_grant" {
@@ -262,12 +264,16 @@ resource "postgresql_grant" "keycloak_schema_grant" {
   schema      = "public"
   privileges  = ["CREATE", "USAGE"]
   role        = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
+
+  depends_on = [google_sql_user.postgresql_user]
 }
 
 resource "postgresql_grant_role" "keycloak_table_grant" {
   count      = var.deploy_k8s_grants ? 1 : 0
   role       = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
   grant_role = "pg_write_all_data"
+
+  depends_on = [google_sql_user.postgresql_user]
 }
 
 /* 
@@ -280,6 +286,8 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
   metadata {
     name = var.keycloak_namespace_name
   }
+
+  depends_on = [google_container_cluster.keycloak_cluster]
 }
 
 /* 
@@ -297,6 +305,8 @@ resource "kubernetes_service_account_v1" "keycloak_ksa" {
       "iam.gke.io/gcp-service-account" = google_service_account.keycloak_gsa.email
     }
   }
+
+  depends_on = [google_container_cluster.keycloak_cluster]
 }
 
 resource "google_service_account_iam_member" "keycloak_ksa_iam" {
@@ -319,6 +329,8 @@ resource "kubectl_manifest" "keycloak_crd" {
   yaml_body = data.http.keycloak_crd.response_body
 
   wait_for_rollout = false
+
+  depends_on = [google_container_cluster.keycloak_cluster]
 }
 
 data "http" "keycloak_realm_import_crd" {
@@ -329,6 +341,8 @@ resource "kubectl_manifest" "keycloak_realm_import_crd" {
   yaml_body = data.http.keycloak_realm_import_crd.response_body
 
   wait_for_rollout = false
+
+  depends_on = [google_container_cluster.keycloak_cluster]
 }
 
 /*
@@ -350,7 +364,7 @@ resource "kubectl_manifest" "keycloak_operator" {
 
   depends_on = [
     kubectl_manifest.keycloak_crd,
-    kubectl_manifest.keycloak_realm_import_crd
+    kubectl_manifest.keycloak_realm_import_crd,
   ]
 }
 
@@ -375,6 +389,8 @@ resource "kubernetes_manifest" "keycloak_bootstrap_admin_secret" {
       password = "admin"
     }
   }
+
+  depends_on = [google_container_cluster.keycloak_cluster]
 }
 
 /*
@@ -399,6 +415,8 @@ resource "kubernetes_manifest" "keycloak_db_secret" {
       password = "dummy-password"
     }
   }
+
+  depends_on = [google_container_cluster.keycloak_cluster]
 }
 
 /*
@@ -499,9 +517,10 @@ resource "kubernetes_manifest" "keycloak_instance" {
   }
 
   depends_on = [
+    kubectl_manifest.keycloak_crd,
+    kubectl_manifest.keycloak_operator,
     kubernetes_manifest.keycloak_bootstrap_admin_secret,
     kubernetes_manifest.keycloak_db_secret,
-    kubectl_manifest.keycloak_operator,
   ]
 }
 
@@ -532,6 +551,8 @@ resource "kubernetes_manifest" "frontend_config" {
       sslPolicy = google_compute_ssl_policy.ssl_policy.name
     }
   }
+
+  depends_on = [kubernetes_manifest.keycloak_instance]
 }
 
 /* 
@@ -553,6 +574,8 @@ resource "kubernetes_manifest" "managed_certificate" {
       domains = [var.managed_certificate_host]
     }
   }
+
+  depends_on = [kubernetes_manifest.keycloak_instance]
 }
 
 /* 
@@ -578,6 +601,8 @@ resource "kubernetes_manifest" "backend_config" {
       }
     }
   }
+
+  depends_on = [kubernetes_manifest.keycloak_instance]
 }
 
 /* 
@@ -622,4 +647,6 @@ resource "kubernetes_ingress_v1" "ingress" {
       }
     }
   }
+
+  depends_on = [kubernetes_manifest.backend_config, kubernetes_manifest.managed_certificate]
 }
