@@ -343,11 +343,11 @@ This prevents issues when immediately trying to deploy Kubernetes resources.
 
 ### Database Password
 
-The default database user password is set to `"change_me"` with lifecycle ignore_changes. In production:
+The default database user password is set to `"change_me"` with lifecycle ignore_changes. The password is available as a sensitive output (`cloud_sql_database_password`) that can be passed to the application module for PostgreSQL provider configuration. In production:
 
 1. Change the password immediately after creation
-2. Store the password in Secret Manager
-3. The lifecycle rule prevents Terraform from reverting your changes
+2. The lifecycle rule prevents Terraform from reverting your changes
+3. Use the output value to configure the PostgreSQL provider in the application module
 
 ### IAM Users
 

@@ -251,16 +251,11 @@ provider "kubectl" {
 }
 
 # PostgreSQL provider
-data "google_secret_manager_secret_version_access" "keycloak_db_password" {
-  secret  = "KEYCLOAK_DB_PASSWORD"
-  project = var.project_id
-}
-
 provider "postgresql" {
   scheme    = "gcppostgres"
   host      = module.keycloak_infrastructure.cloud_sql_connection_name
   username  = module.keycloak_infrastructure.cloud_sql_database_username
-  password  = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
+  password  = module.keycloak_infrastructure.cloud_sql_database_password
   superuser = false
 }
 

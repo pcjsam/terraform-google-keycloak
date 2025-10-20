@@ -175,11 +175,6 @@ terraform apply
 ```hcl
 # Add to main.tf after stage 1 completes
 
-data "google_secret_manager_secret_version_access" "keycloak_db_password" {
-  secret  = "KEYCLOAK_DB_PASSWORD"
-  project = var.project_id
-}
-
 provider "kubernetes" {
   host                   = "https://${module.keycloak_infrastructure.keycloak_cluster_endpoint}"
   token                  = module.keycloak_infrastructure.keycloak_cluster_access_token
@@ -197,7 +192,7 @@ provider "postgresql" {
   scheme    = "gcppostgres"
   host      = module.keycloak_infrastructure.cloud_sql_connection_name
   username  = module.keycloak_infrastructure.cloud_sql_database_username
-  password  = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
+  password  = module.keycloak_infrastructure.cloud_sql_database_password
   superuser = false
 }
 
@@ -303,17 +298,7 @@ For detailed information about variables and outputs for each module, please ref
 
 First, ensure all required Google Cloud APIs are enabled in your GCP project.
 
-### 2. Create Secret Manager Secret
-
-Create a secret in Secret Manager for the database password:
-
-```bash
-echo -n "your-secure-password" | gcloud secrets create KEYCLOAK_DB_PASSWORD \
-  --data-file=- \
-  --project=your-project-id
-```
-
-### 3. Build and Push Keycloak Image
+### 2. Build and Push Keycloak Image
 
 Build and push your Keycloak image to Artifact Registry or Container Registry:
 
@@ -322,7 +307,7 @@ docker build -t us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4 .
 docker push us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4
 ```
 
-### 4. Deploy Infrastructure Module
+### 3. Deploy Infrastructure Module
 
 **Create `main.tf` in your root module:**
 
@@ -351,16 +336,11 @@ terraform init
 terraform apply
 ```
 
-### 5. Deploy Application Module
+### 4. Deploy Application Module
 
 After infrastructure is ready, add the application module to your `main.tf`:
 
 ```hcl
-data "google_secret_manager_secret_version_access" "keycloak_db_password" {
-  secret  = "KEYCLOAK_DB_PASSWORD"
-  project = var.project_id
-}
-
 provider "kubernetes" {
   host                   = "https://${module.keycloak_infrastructure.keycloak_cluster_endpoint}"
   token                  = module.keycloak_infrastructure.keycloak_cluster_access_token
@@ -378,7 +358,7 @@ provider "postgresql" {
   scheme    = "gcppostgres"
   host      = module.keycloak_infrastructure.cloud_sql_connection_name
   username  = module.keycloak_infrastructure.cloud_sql_database_username
-  password  = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
+  password  = module.keycloak_infrastructure.cloud_sql_database_password
   superuser = false
 }
 
@@ -410,7 +390,7 @@ Apply to deploy Keycloak and all Kubernetes resources:
 terraform apply
 ```
 
-### 6. Configure DNS
+### 5. Configure DNS
 
 After deployment, get the public IP address and configure your DNS:
 
@@ -420,7 +400,7 @@ terraform output -raw keycloak_ingress_public_ip
 
 Create an A record pointing your domain (e.g., `keycloak.example.com`) to the output IP address.
 
-### 7. Wait for Certificate Provisioning
+### 6. Wait for Certificate Provisioning
 
 Google-managed certificates can take up to 15 minutes to provision. Monitor the certificate status:
 
@@ -526,9 +506,10 @@ Ensure:
 Ensure:
 
 - Cloud SQL instance is created and running
-- Secret Manager secret exists with the correct password
+- Infrastructure module outputs the database password correctly
 - Your local environment has Cloud SQL Proxy installed (for `gcppostgres` scheme)
 - IAM authentication is enabled on the Cloud SQL instance
+- PostgreSQL provider is configured with the infrastructure module's password output
 
 ### Certificate Not Provisioning
 
@@ -553,10 +534,10 @@ If Keycloak pods fail to start:
 If Keycloak cannot connect to the database:
 
 - Verify the Cloud SQL instance is running
-- Check the database password in Secret Manager
-- Ensure the postgresql provider configuration is correct
+- Ensure the PostgreSQL provider is configured with the infrastructure module's password output
+- Verify the postgresql provider configuration is correct
 - Verify IAM authentication is enabled on the Cloud SQL instance
-- Check that database grants were applied in stage 2
+- Check that database grants were applied in the application module deployment
 
 ### Image Pull Errors
 
