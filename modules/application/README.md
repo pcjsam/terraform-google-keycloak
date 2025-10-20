@@ -109,8 +109,8 @@ module "keycloak_application" {
 
   # Keycloak Configuration
   keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.3.3"
-  keycloak_operator_version = "26.3.3"
+  keycloak_crds_version     = "23.3.3"
+  keycloak_operator_version = "23.3.3"
   managed_certificate_host  = "keycloak.example.com"
 }
 ```
@@ -143,8 +143,8 @@ module "keycloak_application" {
 
   # Keycloak Configuration
   keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.3.3"
-  keycloak_operator_version = "26.3.3"
+  keycloak_crds_version     = "23.3.3"
+  keycloak_operator_version = "23.3.3"
 
   # SSL & Ingress Configuration
   managed_certificate_host  = "auth.example.com"
@@ -515,7 +515,7 @@ If Workload Identity is not working:
 This module is tested with:
 
 - **Terraform**: >= 1.9.8
-- **Keycloak Operator**: 26.3.3
+- **Keycloak Operator**: 23.3.3
 - **Keycloak**: 26.4
 - **Cloud SQL Proxy**: 2.14.1
 - **GKE**: Autopilot clusters

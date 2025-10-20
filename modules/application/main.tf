@@ -102,7 +102,7 @@ resource "kubectl_manifest" "keycloak_crd" {
 }
 
 data "http" "keycloak_realm_import_crd" {
-  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/${var.keycloak_operator_version}/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml"
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/${var.keycloak_crds_version}/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml"
 }
 
 resource "kubectl_manifest" "keycloak_realm_import_crd" {
@@ -152,7 +152,7 @@ resource "terraform_data" "wait_for_crds" {
 */
 
 data "http" "keycloak_operator" {
-  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/kubernetes.yml"
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/${var.keycloak_operator_version}/kubernetes/kubernetes.yml"
 }
 
 resource "kubectl_manifest" "keycloak_operator" {
