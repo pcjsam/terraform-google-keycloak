@@ -319,11 +319,6 @@ variable "keycloak_image_project_id" {
   description = "The GCP project ID where the Keycloak container image is hosted"
 }
 
-variable "keycloak_image" {
-  type        = string
-  description = "The Keycloak container image to use"
-}
-
 variable "keycloak_cluster_name" {
   type        = string
   description = "The name of the Keycloak GKE cluster"
@@ -396,6 +391,28 @@ variable "keycloak_k8s_service_account_name" {
 
 /*
 ** ******************************************************
+** Keycloak - CRDs Installation
+** ******************************************************
+*/
+
+variable "keycloak_crds_version" {
+  type        = string
+  description = "The version of the Keycloak Operator CRDs to install"
+}
+
+/*
+** ******************************************************
+** Keycloak - Operator Deployment
+** ******************************************************
+*/
+
+variable "keycloak_operator_version" {
+  type        = string
+  description = "The version of the Keycloak Operator to deploy"
+}
+
+/*
+** ******************************************************
 ** Keycloak - Bootstrap Admin Secret
 ** ******************************************************
 */
@@ -424,7 +441,7 @@ variable "keycloak_db_secret_name" {
 ** ******************************************************
 */
 
-variable "keycloak_image_tag" {
+variable "keycloak_image" {
   type        = string
   description = "The Keycloak container image tag to use"
 }

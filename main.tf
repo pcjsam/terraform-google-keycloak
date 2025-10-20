@@ -312,7 +312,7 @@ resource "google_service_account_iam_member" "keycloak_ksa_iam" {
 */
 
 data "http" "keycloak_crd" {
-  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloaks.k8s.keycloak.org-v1.yml"
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/${var.keycloak_crds_version}/kubernetes/keycloaks.k8s.keycloak.org-v1.yml"
 }
 
 resource "kubectl_manifest" "keycloak_crd" {
@@ -322,7 +322,7 @@ resource "kubectl_manifest" "keycloak_crd" {
 }
 
 data "http" "keycloak_realm_import_crd" {
-  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml"
+  url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/${var.keycloak_operator_version}/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml"
 }
 
 resource "kubectl_manifest" "keycloak_realm_import_crd" {

@@ -140,8 +140,9 @@ module "keycloak" {
 
   # Keycloak Configuration
   keycloak_image_project_id   = "my-gcp-project"
-  keycloak_image              = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.3.3"
-  keycloak_image_tag          = "26.3.3"
+  keycloak_image              = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
+  keycloak_crds_version       = "26.3.3"
+  keycloak_operator_version   = "26.3.3"
   managed_certificate_host    = "keycloak.example.com"
 
   # Optional: Database Configuration
@@ -190,8 +191,9 @@ module "keycloak" {
 
   # Keycloak Configuration
   keycloak_image_project_id               = "my-gcp-project"
-  keycloak_image                          = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.3.3"
-  keycloak_image_tag                      = "26.3.3"
+  keycloak_image                          = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
+  keycloak_crds_version                   = "26.3.3"
+  keycloak_operator_version               = "26.3.3"
   keycloak_cluster_name                   = "keycloak-cluster"
   keycloak_cluster_deletion_protection    = true
   keycloak_cluster_enable_autopilot       = true
@@ -236,81 +238,87 @@ resource "google_project_service" "services" {
 
 ### Required Variables
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `project` | string | GCP project ID |
-| `region` | string | GCP region for resources |
-| `number` | string | GCP project number |
-| `keycloak_image_project_id` | string | GCP project ID where Keycloak image is hosted |
-| `keycloak_image` | string | Full Keycloak container image path |
-| `keycloak_image_tag` | string | Keycloak container image tag |
-| `managed_certificate_host` | string | Domain name for the managed SSL certificate |
+| Variable                    | Type   | Description                                      |
+| --------------------------- | ------ | ------------------------------------------------ |
+| `project`                   | string | GCP project ID                                   |
+| `region`                    | string | GCP region for resources                         |
+| `number`                    | string | GCP project number                               |
+| `keycloak_image_project_id` | string | GCP project ID where Keycloak image is hosted    |
+| `keycloak_image`            | string | Keycloak container image tag to use              |
+| `keycloak_crds_version`     | string | Version of the Keycloak Operator CRDs to install |
+| `keycloak_operator_version` | string | Version of the Keycloak Operator to deploy       |
+| `managed_certificate_host`  | string | Domain name for the managed SSL certificate      |
 
 ### Optional Variables
 
 #### Network Configuration
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `network_name` | string | `"keycloak-network"` | VPC network name |
-| `network_auto_create_subnetworks` | bool | `false` | Auto-create subnetworks |
-| `subnetwork_name` | string | `"keycloak-subnetwork"` | Subnetwork name |
-| `subnetwork_ip_cidr_range` | string | `"10.10.0.0/16"` | Subnetwork IP CIDR range |
-| `subnetwork_private_ip_google_access` | bool | `true` | Enable private Google access |
+
+| Variable                              | Type   | Default                 | Description                  |
+| ------------------------------------- | ------ | ----------------------- | ---------------------------- |
+| `network_name`                        | string | `"keycloak-network"`    | VPC network name             |
+| `network_auto_create_subnetworks`     | bool   | `false`                 | Auto-create subnetworks      |
+| `subnetwork_name`                     | string | `"keycloak-subnetwork"` | Subnetwork name              |
+| `subnetwork_ip_cidr_range`            | string | `"10.10.0.0/16"`        | Subnetwork IP CIDR range     |
+| `subnetwork_private_ip_google_access` | bool   | `true`                  | Enable private Google access |
 
 #### Database Configuration
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `db_instance_name` | string | `"keycloak-instance"` | Database instance name |
-| `db_version` | string | `"POSTGRES_17"` | PostgreSQL version |
-| `db_deletion_protection` | bool | `false` | Prevent database deletion |
-| `db_tier` | string | `"db-perf-optimized-N-2"` | Database machine tier |
-| `db_edition` | string | `"ENTERPRISE_PLUS"` | Database edition |
-| `db_availability_type` | string | `"REGIONAL"` | Database availability type |
-| `db_name` | string | `"keycloak"` | Database name |
-| `db_charset` | string | `"UTF8"` | Database charset |
-| `db_collation` | string | `"en_US.UTF8"` | Database collation |
-| `db_user_name` | string | `"postgres"` | Default database user |
-| `db_read_users` | set(string) | `[]` | Users with read-only access |
-| `db_write_users` | set(string) | `[]` | Users with read-write access |
+
+| Variable                 | Type        | Default                   | Description                  |
+| ------------------------ | ----------- | ------------------------- | ---------------------------- |
+| `db_instance_name`       | string      | `"keycloak-instance"`     | Database instance name       |
+| `db_version`             | string      | `"POSTGRES_17"`           | PostgreSQL version           |
+| `db_deletion_protection` | bool        | `false`                   | Prevent database deletion    |
+| `db_tier`                | string      | `"db-perf-optimized-N-2"` | Database machine tier        |
+| `db_edition`             | string      | `"ENTERPRISE_PLUS"`       | Database edition             |
+| `db_availability_type`   | string      | `"REGIONAL"`              | Database availability type   |
+| `db_name`                | string      | `"keycloak"`              | Database name                |
+| `db_charset`             | string      | `"UTF8"`                  | Database charset             |
+| `db_collation`           | string      | `"en_US.UTF8"`            | Database collation           |
+| `db_user_name`           | string      | `"postgres"`              | Default database user        |
+| `db_read_users`          | set(string) | `[]`                      | Users with read-only access  |
+| `db_write_users`         | set(string) | `[]`                      | Users with read-write access |
 
 #### Keycloak Configuration
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `keycloak_cluster_name` | string | `"keycloak-cluster"` | GKE cluster name |
-| `keycloak_cluster_deletion_protection` | bool | `false` | Prevent cluster deletion |
-| `keycloak_cluster_enable_autopilot` | bool | `true` | Enable GKE Autopilot mode |
-| `keycloak_namespace_name` | string | `"keycloak"` | Kubernetes namespace |
-| `keycloak_k8s_service_account_name` | string | `"keycloak-ksa"` | Kubernetes service account name |
-| `keycloak_google_service_account_name` | string | `"keycloak-gsa"` | GCP service account name |
+
+| Variable                               | Type   | Default              | Description                     |
+| -------------------------------------- | ------ | -------------------- | ------------------------------- |
+| `keycloak_cluster_name`                | string | `"keycloak-cluster"` | GKE cluster name                |
+| `keycloak_cluster_deletion_protection` | bool   | `false`              | Prevent cluster deletion        |
+| `keycloak_cluster_enable_autopilot`    | bool   | `true`               | Enable GKE Autopilot mode       |
+| `keycloak_namespace_name`              | string | `"keycloak"`         | Kubernetes namespace            |
+| `keycloak_k8s_service_account_name`    | string | `"keycloak-ksa"`     | Kubernetes service account name |
+| `keycloak_google_service_account_name` | string | `"keycloak-gsa"`     | GCP service account name        |
 
 #### SSL & Ingress Configuration
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `ssl_policy_name` | string | `"keycloak-ssl-policy"` | SSL policy name |
-| `ssl_policy_profile` | string | `"MODERN"` | SSL policy profile |
-| `frontend_config_name` | string | `"keycloak-frontend-config"` | Frontend config name |
+
+| Variable                   | Type   | Default                          | Description              |
+| -------------------------- | ------ | -------------------------------- | ------------------------ |
+| `ssl_policy_name`          | string | `"keycloak-ssl-policy"`          | SSL policy name          |
+| `ssl_policy_profile`       | string | `"MODERN"`                       | SSL policy profile       |
+| `frontend_config_name`     | string | `"keycloak-frontend-config"`     | Frontend config name     |
 | `managed_certificate_name` | string | `"keycloak-managed-certificate"` | Managed certificate name |
-| `backend_config_name` | string | `"keycloak-backend-config"` | Backend config name |
-| `ingress_name` | string | `"keycloak-ingress"` | Ingress resource name |
-| `public_ip_address_name` | string | `"keycloak-public-ip"` | Public IP address name |
+| `backend_config_name`      | string | `"keycloak-backend-config"`      | Backend config name      |
+| `ingress_name`             | string | `"keycloak-ingress"`             | Ingress resource name    |
+| `public_ip_address_name`   | string | `"keycloak-public-ip"`           | Public IP address name   |
 
 #### Deployment Options
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `deploy_k8s_grants` | bool | `true` | Deploy PostgreSQL grants |
-| `deploy_k8s_resources` | bool | `true` | Deploy Kubernetes resources |
+
+| Variable               | Type | Default | Description                 |
+| ---------------------- | ---- | ------- | --------------------------- |
+| `deploy_k8s_grants`    | bool | `true`  | Deploy PostgreSQL grants    |
+| `deploy_k8s_resources` | bool | `true`  | Deploy Kubernetes resources |
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `network_id` | VPC network ID |
-| `subnetwork_id` | Subnetwork ID |
-| `cloud_sql_connection_name` | Cloud SQL connection name |
-| `cloud_sql_instance_name` | Cloud SQL instance name |
-| `cloud_sql_service_account_email` | Cloud SQL service account email |
-| `cloud_sql_database_name` | Cloud SQL database name |
-| `cloud_sql_database_username` | Cloud SQL database username |
+| Output                               | Description                        |
+| ------------------------------------ | ---------------------------------- |
+| `network_id`                         | VPC network ID                     |
+| `subnetwork_id`                      | Subnetwork ID                      |
+| `cloud_sql_connection_name`          | Cloud SQL connection name          |
+| `cloud_sql_instance_name`            | Cloud SQL instance name            |
+| `cloud_sql_service_account_email`    | Cloud SQL service account email    |
+| `cloud_sql_database_name`            | Cloud SQL database name            |
+| `cloud_sql_database_username`        | Cloud SQL database username        |
 | `keycloak_gcp_service_account_email` | Keycloak GCP service account email |
 
 ## Deployment Steps
@@ -375,23 +383,27 @@ kubectl get managedcertificate -n keycloak
 ### Architecture Components
 
 1. **Networking Layer**
+
    - Creates a custom VPC network with a private subnet
    - Configures VPC peering for Cloud SQL private connectivity
    - Allocates a global static IP for the load balancer
 
 2. **Database Layer**
+
    - Deploys a Cloud SQL PostgreSQL instance with private IP
    - Configures IAM authentication for secure, password-less connections
    - Sets up automated backups and point-in-time recovery
    - Creates database grants for specified read/write users
 
 3. **Kubernetes Layer**
+
    - Deploys a GKE Autopilot cluster for simplified operations
    - Creates a dedicated namespace for Keycloak resources
    - Installs Keycloak CRDs and the Keycloak Operator
    - Configures Workload Identity for secure GCP service account binding
 
 4. **Keycloak Deployment**
+
    - Uses the Keycloak Operator to manage the Keycloak instance
    - Deploys Cloud SQL Proxy as an init container for database connectivity
    - Configures health checks and metrics endpoints
@@ -424,6 +436,7 @@ kubectl get managedcertificate -n keycloak
 ### Certificate Not Provisioning
 
 If the managed certificate stays in "Provisioning" state:
+
 - Verify DNS A record points to the correct IP address
 - Check that the domain is publicly resolvable
 - Ensure the Ingress resource is correctly configured
@@ -432,6 +445,7 @@ If the managed certificate stays in "Provisioning" state:
 ### Keycloak Pod Not Starting
 
 If Keycloak pods fail to start:
+
 - Check Cloud SQL Proxy logs: `kubectl logs -n keycloak <pod-name> -c cloud-sql-proxy`
 - Verify Workload Identity binding is correct
 - Ensure the GCP service account has `roles/cloudsql.client` role
@@ -440,6 +454,7 @@ If Keycloak pods fail to start:
 ### Database Connection Issues
 
 If Keycloak cannot connect to the database:
+
 - Verify the Cloud SQL instance is running
 - Check the database password in Secret Manager
 - Ensure the postgresql provider configuration is correct
@@ -448,6 +463,7 @@ If Keycloak cannot connect to the database:
 ### Image Pull Errors
 
 If the cluster cannot pull the Keycloak image:
+
 - Verify the image path is correct
 - Ensure the Compute Engine default service account has `roles/artifactregistry.reader`
 - Check that the image exists in Artifact Registry
@@ -475,6 +491,7 @@ Contributions are welcome! Please ensure all changes are tested and documented.
 ## Support
 
 For issues and questions:
+
 - Check the Troubleshooting section above
 - Review Keycloak documentation: https://www.keycloak.org/documentation
 - Review GKE Autopilot documentation: https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-overview
