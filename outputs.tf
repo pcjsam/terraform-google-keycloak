@@ -68,6 +68,22 @@ output "keycloak_cluster_name" {
   value       = google_container_cluster.keycloak_cluster.name
 }
 
+output "keycloak_cluster_endpoint" {
+  description = "Keycloak GKE cluster endpoint"
+  value       = google_container_cluster.keycloak_cluster.endpoint
+}
+
+output "keycloak_cluster_access_token" {
+  description = "Access token for Kubernetes provider configuration"
+  value       = data.google_client_config.current.access_token
+  sensitive   = true
+}
+
+output "keycloak_cluster_ca_certificate" {
+  description = "CA certificate for Kubernetes provider configuration"
+  value       = google_container_cluster.keycloak_cluster.master_auth[0].cluster_ca_certificate
+}
+
 /* 
 ** ******************************************************
 ** Keycloak - GCP Service Account

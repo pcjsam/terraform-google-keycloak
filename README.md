@@ -68,30 +68,100 @@ terraform {
 
 ## Provider Configuration
 
-### Required Data Sources
+### Important: Circular Dependency Challenge
 
-The following data sources are required for provider configuration:
+This module has a **circular dependency** between provider configuration and resource creation:
 
+- The Kubernetes, kubectl, and PostgreSQL providers need connection information (cluster endpoint, database connection string)
+- But these resources are created by the module itself
+- Terraform providers are configured **before** any resources are created
+
+This means you **cannot** reference module outputs directly in provider configurations without special handling.
+
+### Required Provider Configuration
+
+Your calling module (root module) **must** configure all required providers. Here's how to handle the circular dependency:
+
+#### Option 1: Two-Stage Apply (Recommended for Production)
+
+**Stage 1:** Create infrastructure without Kubernetes resources
 ```hcl
-# Secret Manager secret containing the database password
+# main.tf in your root module
+module "keycloak" {
+  source = "./terraform-google-keycloak"
+
+  # ... all your variables ...
+
+  # Disable Kubernetes resources on first apply
+  deploy_k8s_grants    = false
+  deploy_k8s_resources = false
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.project_region
+}
+
+provider "http" {
+  # No configuration required
+}
+```
+
+Apply stage 1:
+```bash
+terraform apply
+```
+
+**Stage 2:** Configure remaining providers and enable Kubernetes resources
+```hcl
+# After stage 1 completes, add these providers:
+
 data "google_secret_manager_secret_version_access" "keycloak_db_password" {
   secret  = "KEYCLOAK_DB_PASSWORD"
   project = var.project_id
 }
 
-# GKE cluster for Kubernetes provider
-data "google_container_cluster" "keycloak_cluster" {
-  name     = module.keycloak.keycloak_gke_cluster_name
-  location = var.project_region
-
-  depends_on = [module.keycloak]
+provider "kubernetes" {
+  host                   = "https://${module.keycloak.keycloak_cluster_endpoint}"
+  token                  = module.keycloak.keycloak_cluster_access_token
+  cluster_ca_certificate = base64decode(module.keycloak.keycloak_cluster_ca_certificate)
 }
 
-# Current GCP client configuration
-data "google_client_config" "current" {}
+provider "kubectl" {
+  host                   = "https://${module.keycloak.keycloak_cluster_endpoint}"
+  token                  = module.keycloak.keycloak_cluster_access_token
+  cluster_ca_certificate = base64decode(module.keycloak.keycloak_cluster_ca_certificate)
+  load_config_file       = false
+}
+
+provider "postgresql" {
+  scheme    = "gcppostgres"
+  host      = module.keycloak.cloud_sql_connection_name
+  username  = module.keycloak.cloud_sql_database_username
+  password  = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
+  superuser = false
+}
+
+# Update module to enable Kubernetes resources
+module "keycloak" {
+  source = "./terraform-google-keycloak"
+
+  # ... all your variables ...
+
+  # Enable Kubernetes resources on second apply
+  deploy_k8s_grants    = true
+  deploy_k8s_resources = true
+}
 ```
 
-### Provider Configuration Example
+Apply stage 2:
+```bash
+terraform apply
+```
+
+#### Option 2: Use gcloud for Local Provider Auth (Development/Testing)
+
+Configure providers to use local gcloud credentials instead of module outputs:
 
 ```hcl
 provider "google" {
@@ -99,31 +169,53 @@ provider "google" {
   region  = var.project_region
 }
 
+data "google_secret_manager_secret_version_access" "keycloak_db_password" {
+  secret  = "KEYCLOAK_DB_PASSWORD"
+  project = var.project_id
+}
+
+# Use exec to get cluster credentials dynamically
 provider "kubernetes" {
-  host                   = "https://${data.google_container_cluster.keycloak_cluster.endpoint}"
-  token                  = data.google_client_config.current.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.keycloak_cluster.master_auth[0].cluster_ca_certificate)
+  host                   = "https://${module.keycloak.keycloak_cluster_endpoint}"
+  cluster_ca_certificate = base64decode(module.keycloak.keycloak_cluster_ca_certificate)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "gke-gcloud-auth-plugin"
+  }
 }
 
 provider "kubectl" {
-  host                   = "https://${data.google_container_cluster.keycloak_cluster.endpoint}"
-  token                  = data.google_client_config.current.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.keycloak_cluster.master_auth[0].cluster_ca_certificate)
+  host                   = "https://${module.keycloak.keycloak_cluster_endpoint}"
+  cluster_ca_certificate = base64decode(module.keycloak.keycloak_cluster_ca_certificate)
   load_config_file       = false
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "gke-gcloud-auth-plugin"
+  }
 }
 
 provider "postgresql" {
-  scheme      = "gcppostgres"
-  host        = module.keycloak.cloud_sql_connection_name
-  username    = module.keycloak.cloud_sql_database_username
-  password    = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
-  superuser   = false
+  scheme    = "gcppostgres"
+  host      = module.keycloak.cloud_sql_connection_name
+  username  = module.keycloak.cloud_sql_database_username
+  password  = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
+  superuser = false
 }
 
 provider "http" {
-  # No configuration required - used to fetch remote YAML manifests
+  # No configuration required
+}
+
+module "keycloak" {
+  source = "./terraform-google-keycloak"
+
+  # ... your variables ...
 }
 ```
+
+**Note:** Option 2 requires `gke-gcloud-auth-plugin` installed and may still encounter timing issues if the cluster isn't fully ready when Terraform tries to apply Kubernetes resources.
 
 ## Usage Example
 
@@ -310,16 +402,38 @@ resource "google_project_service" "services" {
 
 ## Outputs
 
-| Output                               | Description                        |
-| ------------------------------------ | ---------------------------------- |
-| `network_id`                         | VPC network ID                     |
-| `subnetwork_id`                      | Subnetwork ID                      |
-| `cloud_sql_connection_name`          | Cloud SQL connection name          |
-| `cloud_sql_instance_name`            | Cloud SQL instance name            |
-| `cloud_sql_service_account_email`    | Cloud SQL service account email    |
-| `cloud_sql_database_name`            | Cloud SQL database name            |
-| `cloud_sql_database_username`        | Cloud SQL database username        |
-| `keycloak_gcp_service_account_email` | Keycloak GCP service account email |
+### Network Outputs
+
+| Output          | Description    |
+| --------------- | -------------- |
+| `network_id`    | VPC network ID |
+| `subnetwork_id` | Subnetwork ID  |
+
+### Database Outputs
+
+| Output                            | Description                     |
+| --------------------------------- | ------------------------------- |
+| `cloud_sql_connection_name`       | Cloud SQL connection name       |
+| `cloud_sql_instance_name`         | Cloud SQL instance name         |
+| `cloud_sql_service_account_email` | Cloud SQL service account email |
+| `cloud_sql_database_name`         | Cloud SQL database name         |
+| `cloud_sql_database_username`     | Cloud SQL database username     |
+
+### Keycloak Cluster Outputs
+
+| Output                             | Description                                                    | Sensitive |
+| ---------------------------------- | -------------------------------------------------------------- | --------- |
+| `keycloak_cluster_name`            | GKE cluster name                                               | No        |
+| `keycloak_cluster_endpoint`        | GKE cluster endpoint for Kubernetes provider configuration     | No        |
+| `keycloak_cluster_access_token`    | Access token for Kubernetes provider configuration             | Yes       |
+| `keycloak_cluster_ca_certificate`  | CA certificate for Kubernetes provider configuration           | No        |
+| `keycloak_gcp_service_account_email` | Keycloak GCP service account email for Workload Identity       | No        |
+
+### Ingress Outputs
+
+| Output                       | Description                   |
+| ---------------------------- | ----------------------------- |
+| `keycloak_ingress_public_ip` | Keycloak Ingress public IP address |
 
 ## Deployment Steps
 
@@ -346,13 +460,54 @@ docker build -t us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.3.3
 docker push us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.3.3
 ```
 
-### 4. Configure Providers
+### 4. Configure Providers (Root Module)
 
-Create a `providers.tf` file with the configuration shown in the Provider Configuration section above.
+Create your root module configuration with provider setup. See the [Provider Configuration](#provider-configuration) section for detailed options.
 
-### 5. Apply Terraform Configuration
+**Recommended Approach:** Use the two-stage apply method:
 
-Initialize and apply the Terraform configuration:
+**Create `providers.tf` in your root module:**
+```hcl
+provider "google" {
+  project = var.project_id
+  region  = var.project_region
+}
+
+provider "http" {
+  # No configuration required
+}
+
+# Add these providers AFTER stage 1 completes
+# provider "kubernetes" { ... }
+# provider "kubectl" { ... }
+# provider "postgresql" { ... }
+```
+
+**Create `main.tf` in your root module:**
+```hcl
+module "keycloak" {
+  source = "./terraform-google-keycloak"
+
+  project = var.project_id
+  region  = var.project_region
+  number  = var.project_number
+
+  # Keycloak Configuration
+  keycloak_image_project_id = var.project_id
+  keycloak_image            = "us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.3.3"
+  keycloak_crds_version     = "26.3.3"
+  keycloak_operator_version = "26.3.3"
+  managed_certificate_host  = "keycloak.example.com"
+
+  # IMPORTANT: Disable Kubernetes resources for first apply
+  deploy_k8s_grants    = false
+  deploy_k8s_resources = false
+}
+```
+
+### 5. Apply Stage 1 - Infrastructure
+
+Initialize and apply to create VPC, Cloud SQL, and GKE cluster:
 
 ```bash
 terraform init
@@ -360,17 +515,71 @@ terraform plan
 terraform apply
 ```
 
-### 6. Configure DNS
+This creates the infrastructure without any Kubernetes resources.
+
+### 6. Configure Additional Providers
+
+After stage 1 completes, add the Kubernetes, kubectl, and PostgreSQL providers to your `providers.tf`:
+
+```hcl
+data "google_secret_manager_secret_version_access" "keycloak_db_password" {
+  secret  = "KEYCLOAK_DB_PASSWORD"
+  project = var.project_id
+}
+
+provider "kubernetes" {
+  host                   = "https://${module.keycloak.keycloak_cluster_endpoint}"
+  token                  = module.keycloak.keycloak_cluster_access_token
+  cluster_ca_certificate = base64decode(module.keycloak.keycloak_cluster_ca_certificate)
+}
+
+provider "kubectl" {
+  host                   = "https://${module.keycloak.keycloak_cluster_endpoint}"
+  token                  = module.keycloak.keycloak_cluster_access_token
+  cluster_ca_certificate = base64decode(module.keycloak.keycloak_cluster_ca_certificate)
+  load_config_file       = false
+}
+
+provider "postgresql" {
+  scheme    = "gcppostgres"
+  host      = module.keycloak.cloud_sql_connection_name
+  username  = module.keycloak.cloud_sql_database_username
+  password  = data.google_secret_manager_secret_version_access.keycloak_db_password.secret_data
+  superuser = false
+}
+```
+
+Update your module call in `main.tf` to enable Kubernetes resources:
+
+```hcl
+module "keycloak" {
+  # ... same configuration as before ...
+
+  # Enable Kubernetes resources for second apply
+  deploy_k8s_grants    = true
+  deploy_k8s_resources = true
+}
+```
+
+### 7. Apply Stage 2 - Keycloak Application
+
+Apply again to deploy Keycloak and all Kubernetes resources:
+
+```bash
+terraform apply
+```
+
+### 8. Configure DNS
 
 After deployment, get the public IP address and configure your DNS:
 
 ```bash
-terraform output ingress_public_ip
+terraform output keycloak_ingress_public_ip
 ```
 
-Create an A record pointing `keycloak.example.com` to the output IP address.
+Create an A record pointing your domain (e.g., `keycloak.example.com`) to the output IP address.
 
-### 7. Wait for Certificate Provisioning
+### 9. Wait for Certificate Provisioning
 
 Google-managed certificates can take up to 15 minutes to provision. Monitor the certificate status:
 
@@ -378,7 +587,26 @@ Google-managed certificates can take up to 15 minutes to provision. Monitor the 
 kubectl get managedcertificate -n keycloak
 ```
 
+Or connect to the cluster first:
+```bash
+gcloud container clusters get-credentials $(terraform output -raw keycloak_cluster_name) \
+  --region=$(terraform output -raw region) \
+  --project=$(terraform output -raw project)
+
+kubectl get managedcertificate -n keycloak
+```
+
 ## How It Works
+
+### Module Architecture
+
+This module is designed as a **comprehensive single-module deployment** with the following characteristics:
+
+- **Requires external provider configuration**: The calling module must configure Kubernetes, kubectl, and PostgreSQL providers (see [Provider Configuration](#provider-configuration))
+- **Two-stage deployment**: Due to provider circular dependencies, deployment requires two stages (infrastructure first, then application)
+- **Automatic dependency management**: Once providers are configured, the module handles all resource dependencies automatically
+- **Exported outputs**: Cluster connection details are exported as outputs for provider configuration and external resource creation
+- **Internal data sources**: The module uses internal data sources to maintain consistency and provide connection information
 
 ### Architecture Components
 
@@ -394,6 +622,7 @@ kubectl get managedcertificate -n keycloak
    - Configures IAM authentication for secure, password-less connections
    - Sets up automated backups and point-in-time recovery
    - Creates database grants for specified read/write users
+   - Requires PostgreSQL provider configuration in calling module
 
 3. **Kubernetes Layer**
 
@@ -401,6 +630,7 @@ kubectl get managedcertificate -n keycloak
    - Creates a dedicated namespace for Keycloak resources
    - Installs Keycloak CRDs and the Keycloak Operator
    - Configures Workload Identity for secure GCP service account binding
+   - Requires Kubernetes/kubectl provider configuration in calling module
 
 4. **Keycloak Deployment**
 
@@ -433,6 +663,31 @@ kubectl get managedcertificate -n keycloak
 
 ## Troubleshooting
 
+### Provider Configuration Errors
+
+**Error: Cannot reference module outputs in provider configuration**
+
+This is expected due to the circular dependency. Use the two-stage apply approach:
+1. First apply with `deploy_k8s_grants = false` and `deploy_k8s_resources = false`
+2. Add provider configurations after infrastructure is created
+3. Second apply with `deploy_k8s_grants = true` and `deploy_k8s_resources = true`
+
+**Error: Failed to configure Kubernetes/kubectl provider**
+
+Ensure:
+- GKE cluster was created successfully in stage 1
+- Module outputs are available: `terraform output keycloak_cluster_endpoint`
+- You're using the correct output references in provider configuration
+- The cluster API server is reachable
+
+**Error: PostgreSQL provider cannot connect**
+
+Ensure:
+- Cloud SQL instance is created and running
+- Secret Manager secret exists with the correct password
+- Your local environment has Cloud SQL Proxy installed (for `gcppostgres` scheme)
+- IAM authentication is enabled on the Cloud SQL instance
+
 ### Certificate Not Provisioning
 
 If the managed certificate stays in "Provisioning" state:
@@ -459,6 +714,7 @@ If Keycloak cannot connect to the database:
 - Check the database password in Secret Manager
 - Ensure the postgresql provider configuration is correct
 - Verify IAM authentication is enabled on the Cloud SQL instance
+- Check that database grants were applied in stage 2
 
 ### Image Pull Errors
 
@@ -468,6 +724,17 @@ If the cluster cannot pull the Keycloak image:
 - Ensure the Compute Engine default service account has `roles/artifactregistry.reader`
 - Check that the image exists in Artifact Registry
 - Verify the image project ID is correctly configured
+
+### Two-Stage Apply Issues
+
+**Resources already exist error on stage 2:**
+- This is normal - Terraform will update the state with the new configuration
+- Run `terraform plan` to see what will change
+
+**Kubernetes resources not deploying:**
+- Verify you changed `deploy_k8s_grants` and `deploy_k8s_resources` to `true`
+- Ensure all providers are configured in your root module
+- Check that the cluster is accessible: `gcloud container clusters describe <cluster-name>`
 
 ## Best Practices
 

@@ -234,6 +234,13 @@ resource "google_container_cluster" "keycloak_cluster" {
   }
 }
 
+data "google_container_cluster" "keycloak_cluster" {
+  name     = google_container_cluster.keycloak_cluster.name
+  location = google_container_cluster.keycloak_cluster.location
+}
+
+data "google_client_config" "current" {}
+
 /* 
 ** ******************************************************
 ** Keycloak - GCP Service Account
