@@ -388,7 +388,7 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
 resource "kubernetes_service_account_v1" "keycloak_ksa" {
   metadata {
     name      = var.keycloak_k8s_service_account_name
-    namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+    namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     # This annotation links the KSA to the GSA for Workload Identity
     annotations = {
       "iam.gke.io/gcp-service-account" = google_service_account.keycloak_gsa.email
@@ -401,7 +401,7 @@ resource "kubernetes_service_account_v1" "keycloak_ksa" {
 resource "google_service_account_iam_member" "keycloak_ksa_iam" {
   service_account_id = google_service_account.keycloak_gsa.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project}.svc.id.goog[${kubernetes_namespace_v1.keycloak_namespace.metadata["name"]}/${kubernetes_service_account_v1.keycloak_ksa.metadata[0].name}]"
+  member             = "serviceAccount:${var.project}.svc.id.goog[${kubernetes_namespace_v1.keycloak_namespace.metadata[0].name}/${kubernetes_service_account_v1.keycloak_ksa.metadata[0].name}]"
 }
 
 /*
@@ -556,7 +556,7 @@ resource "kubernetes_manifest" "keycloak_bootstrap_admin_secret" {
     kind       = "Secret"
     metadata = {
       name      = var.keycloak_bootstrap_admin_secret_name
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     type = "Opaque"
     stringData = {
@@ -581,7 +581,7 @@ resource "kubernetes_manifest" "keycloak_db_secret" {
     kind       = "Secret"
     metadata = {
       name      = var.keycloak_db_secret_name
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     type = "Opaque"
     stringData = {
@@ -607,7 +607,7 @@ resource "kubernetes_manifest" "keycloak_instance" {
     kind       = "Keycloak"
     metadata = {
       name      = "keycloak"
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     spec = {
       instances = 1
@@ -719,7 +719,7 @@ resource "kubernetes_manifest" "frontend_config" {
     kind       = "FrontendConfig"
     metadata = {
       name      = var.frontend_config_name
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     spec = {
       redirectToHttps = {
@@ -745,7 +745,7 @@ resource "kubernetes_manifest" "managed_certificate" {
     kind       = "ManagedCertificate"
     metadata = {
       name      = var.managed_certificate_name
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     spec = {
       domains = [var.managed_certificate_host]
@@ -768,7 +768,7 @@ resource "kubernetes_manifest" "backend_config" {
     kind       = "BackendConfig"
     metadata = {
       name      = var.backend_config_name
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     spec = {
       healthCheck = {
@@ -797,7 +797,7 @@ resource "kubernetes_ingress_v1" "ingress" {
   count = var.deploy_k8s_resources ? 1 : 0
   metadata {
     name      = var.ingress_name
-    namespace = kubernetes_namespace_v1.keycloak_namespace.metadata["name"]
+    namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     annotations = {
       "kubernetes.io/ingress.class"                 = "gce"
       "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.public_ip_address.name
