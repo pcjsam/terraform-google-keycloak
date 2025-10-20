@@ -13,7 +13,7 @@ resource "google_compute_subnetwork" "subnetwork" {
   name                     = var.subnetwork_name
   network                  = google_compute_network.network.id
   ip_cidr_range            = var.subnetwork_ip_cidr_range
-  region                   = var.project
+  region                   = var.region
   private_ip_google_access = var.subnetwork_private_ip_google_access
 }
 
