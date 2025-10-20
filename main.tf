@@ -436,6 +436,45 @@ resource "kubectl_manifest" "keycloak_realm_import_crd" {
 
 /*
 ** ******************************************************
+** CRDs Readiness Check
+** ******************************************************
+*/
+
+resource "terraform_data" "wait_for_crds" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for Keycloak CRDs to be established..."
+
+      # Wait for keycloaks.k8s.keycloak.org CRD
+      echo "Checking keycloaks.k8s.keycloak.org CRD..."
+      if kubectl wait --for=condition=established --timeout=120s crd/keycloaks.k8s.keycloak.org 2>/dev/null; then
+        echo "✓ keycloaks.k8s.keycloak.org CRD is established"
+      else
+        echo "✗ ERROR: keycloaks.k8s.keycloak.org CRD failed to establish"
+        exit 1
+      fi
+
+      # Wait for keycloakrealmimports.k8s.keycloak.org CRD
+      echo "Checking keycloakrealmimports.k8s.keycloak.org CRD..."
+      if kubectl wait --for=condition=established --timeout=120s crd/keycloakrealmimports.k8s.keycloak.org 2>/dev/null; then
+        echo "✓ keycloakrealmimports.k8s.keycloak.org CRD is established"
+      else
+        echo "✗ ERROR: keycloakrealmimports.k8s.keycloak.org CRD failed to establish"
+        exit 1
+      fi
+
+      echo "✓ All Keycloak CRDs are ready"
+    EOT
+  }
+
+  depends_on = [
+    kubectl_manifest.keycloak_crd,
+    kubectl_manifest.keycloak_realm_import_crd,
+  ]
+}
+
+/*
+** ******************************************************
 ** Keycloak - Operator Deployment
 ** ******************************************************
 */
@@ -452,8 +491,55 @@ resource "kubectl_manifest" "keycloak_operator" {
   wait_for_rollout = true
 
   depends_on = [
-    kubectl_manifest.keycloak_crd,
-    kubectl_manifest.keycloak_realm_import_crd,
+    terraform_data.wait_for_crds,
+  ]
+}
+
+/*
+** ******************************************************
+** Operator Readiness Check
+** ******************************************************
+*/
+
+resource "terraform_data" "wait_for_operator" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for Keycloak Operator to be ready..."
+
+      # Wait for the operator deployment to be available
+      echo "Checking keycloak-operator deployment in namespace ${kubernetes_namespace_v1.keycloak_namespace.metadata[0].name}..."
+
+      if kubectl wait --for=condition=Available \
+        deployment/keycloak-operator \
+        -n ${kubernetes_namespace_v1.keycloak_namespace.metadata[0].name} \
+        --timeout=300s 2>/dev/null; then
+        echo "✓ Keycloak Operator deployment is Available"
+      else
+        echo "✗ ERROR: Keycloak Operator deployment did not become Available within 5 minutes"
+        echo "Checking operator status..."
+        kubectl get deployment keycloak-operator -n ${kubernetes_namespace_v1.keycloak_namespace.metadata[0].name} -o wide 2>/dev/null || echo "Deployment not found"
+        kubectl get pods -n ${kubernetes_namespace_v1.keycloak_namespace.metadata[0].name} -l app.kubernetes.io/name=keycloak-operator 2>/dev/null || echo "No operator pods found"
+        exit 1
+      fi
+
+      # Additional check: verify operator pod is running
+      echo "Verifying operator pod is running..."
+      POD_STATUS=$(kubectl get pods -n ${kubernetes_namespace_v1.keycloak_namespace.metadata[0].name} \
+        -l app.kubernetes.io/name=keycloak-operator \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null)
+
+      if [ "$POD_STATUS" = "Running" ]; then
+        echo "✓ Keycloak Operator pod is Running"
+      else
+        echo "⚠ WARNING: Operator pod status is: $POD_STATUS"
+      fi
+
+      echo "✓ Keycloak Operator is ready"
+    EOT
+  }
+
+  depends_on = [
+    kubectl_manifest.keycloak_operator,
   ]
 }
 
@@ -606,8 +692,7 @@ resource "kubernetes_manifest" "keycloak_instance" {
   }
 
   depends_on = [
-    kubectl_manifest.keycloak_crd,
-    kubectl_manifest.keycloak_operator,
+    terraform_data.wait_for_operator,
     kubernetes_manifest.keycloak_bootstrap_admin_secret,
     kubernetes_manifest.keycloak_db_secret,
     postgresql_grant.keycloak_database_grant,
