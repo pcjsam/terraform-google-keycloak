@@ -96,6 +96,11 @@ output "keycloak_cluster_ca_certificate" {
 ** ******************************************************
 */
 
+output "keycloak_gcp_service_account_name" {
+  description = "Keycloak GCP service account email"
+  value       = google_service_account.keycloak_gsa.name
+}
+
 output "keycloak_gcp_service_account_email" {
   description = "Keycloak GCP service account email"
   value       = google_service_account.keycloak_gsa.email
