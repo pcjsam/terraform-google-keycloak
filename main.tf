@@ -167,7 +167,11 @@ resource "postgresql_grant" "postgres_grants" {
   privileges  = ["CONNECT"]
   role        = each.value
 
-  depends_on = [google_sql_user.postgresql_user]
+  depends_on = [
+    google_sql_database_instance.postgresql_instance,
+    google_sql_database.postgresql_db,
+    google_sql_user.postgresql_user
+  ]
 }
 
 resource "postgresql_grant_role" "read" {
@@ -175,7 +179,11 @@ resource "postgresql_grant_role" "read" {
   role       = each.value
   grant_role = "pg_read_all_data"
 
-  depends_on = [google_sql_user.postgresql_user]
+  depends_on = [
+    google_sql_database_instance.postgresql_instance,
+    google_sql_database.postgresql_db,
+    google_sql_user.postgresql_user
+  ]
 }
 
 resource "postgresql_grant_role" "write" {
@@ -183,7 +191,11 @@ resource "postgresql_grant_role" "write" {
   role       = each.value
   grant_role = "pg_write_all_data"
 
-  depends_on = [google_sql_user.postgresql_user]
+  depends_on = [
+    google_sql_database_instance.postgresql_instance,
+    google_sql_database.postgresql_db,
+    google_sql_user.postgresql_user
+  ]
 }
 
 /* 
@@ -254,7 +266,11 @@ resource "postgresql_grant" "keycloak_database_grant" {
   privileges  = ["CONNECT"]
   role        = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
 
-  depends_on = [google_sql_user.postgresql_user]
+  depends_on = [
+    google_sql_database_instance.postgresql_instance,
+    google_sql_database.postgresql_db,
+    google_sql_user.postgresql_user
+  ]
 }
 
 resource "postgresql_grant" "keycloak_schema_grant" {
@@ -265,7 +281,11 @@ resource "postgresql_grant" "keycloak_schema_grant" {
   privileges  = ["CREATE", "USAGE"]
   role        = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
 
-  depends_on = [google_sql_user.postgresql_user]
+  depends_on = [
+    google_sql_database_instance.postgresql_instance,
+    google_sql_database.postgresql_db,
+    google_sql_user.postgresql_user
+  ]
 }
 
 resource "postgresql_grant_role" "keycloak_table_grant" {
@@ -273,7 +293,11 @@ resource "postgresql_grant_role" "keycloak_table_grant" {
   role       = trimsuffix(google_service_account.keycloak_gsa.email, ".gserviceaccount.com")
   grant_role = "pg_write_all_data"
 
-  depends_on = [google_sql_user.postgresql_user]
+  depends_on = [
+    google_sql_database_instance.postgresql_instance,
+    google_sql_database.postgresql_db,
+    google_sql_user.postgresql_user
+  ]
 }
 
 /* 
