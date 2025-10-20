@@ -57,6 +57,12 @@ output "cloud_sql_database_username" {
   value       = google_sql_user.postgresql_user.name
 }
 
+output "cloud_sql_database_password" {
+  description = "Cloud SQL user password"
+  value       = google_sql_user.postgresql_user.password
+  sensitive   = true
+}
+
 /* 
 ** ******************************************************
 ** Keycloak - Cluster
