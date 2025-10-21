@@ -250,7 +250,7 @@ variable "db_backup_retention_unit" {
 variable "public_ipv4_enabled" {
   type        = bool
   description = "Whether this Cloud SQL instance should be assigned a public IPv4 address"
-  default     = true
+  default     = false
 }
 
 variable "db_enable_private_path_for_google_cloud_services" {
