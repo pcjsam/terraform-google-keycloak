@@ -218,8 +218,8 @@ resource "kubernetes_manifest" "keycloak_db_secret" {
 ** ******************************************************
 */
 
-resource "kubernetes_manifest" "keycloak_instance" {
-  manifest = {
+resource "kubectl_manifest" "keycloak_instance" {
+  yaml_body = yamlencode({
     apiVersion = "k8s.keycloak.org/v2alpha1"
     kind       = "Keycloak"
     metadata = {
@@ -306,7 +306,7 @@ resource "kubernetes_manifest" "keycloak_instance" {
         }
       }
     }
-  }
+  })
 
   depends_on = [
     kubectl_manifest.keycloak_operator,
@@ -337,7 +337,7 @@ resource "kubernetes_manifest" "frontend_config" {
     }
   }
 
-  depends_on = [kubernetes_manifest.keycloak_instance]
+  depends_on = [kubectl_manifest.keycloak_instance]
 }
 
 /*
@@ -359,7 +359,7 @@ resource "kubernetes_manifest" "managed_certificate" {
     }
   }
 
-  depends_on = [kubernetes_manifest.keycloak_instance]
+  depends_on = [kubectl_manifest.keycloak_instance]
 }
 
 /*
@@ -385,7 +385,7 @@ resource "kubernetes_manifest" "backend_config" {
     }
   }
 
-  depends_on = [kubernetes_manifest.keycloak_instance]
+  depends_on = [kubectl_manifest.keycloak_instance]
 }
 
 /* 
