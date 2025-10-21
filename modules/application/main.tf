@@ -182,9 +182,9 @@ resource "kubernetes_manifest" "keycloak_bootstrap_admin_secret" {
       namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     type = "Opaque"
-    stringData = {
-      username = "admin"
-      password = "admin"
+    data = {
+      username = base64encode("admin")
+      password = base64encode("admin")
     }
   }
 }
@@ -204,10 +204,10 @@ resource "kubernetes_manifest" "keycloak_db_secret" {
       namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
     }
     type = "Opaque"
-    stringData = {
-      username = trimsuffix(var.keycloak_google_service_account_email, ".gserviceaccount.com")
+    data = {
+      username = base64encode(trimsuffix(var.keycloak_google_service_account_email, ".gserviceaccount.com"))
       # Dummy password, will not be used thanks to cloud sql auth proxy
-      password = "dummy-password"
+      password = base64encode("dummy-password")
     }
   }
 }
