@@ -29,13 +29,30 @@ resource "google_compute_global_address" "private_ip_address" {
   address_type  = "INTERNAL"
   prefix_length = 16
   network       = google_compute_network.network.id
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "Deleting VPC peering before IP address deletion..."
+
+      # Delete the peering first, before the IP address is deleted
+      # The peering uses this IP address range, so it must be deleted first
+      gcloud compute networks peerings delete servicenetworking-googleapis-com \
+        --network=${var.network_name} \
+        --project=${var.project} \
+        --quiet 2>&1 && echo "✓ VPC peering deleted" || echo "Peering already deleted or doesn't exist"
+    EOT
+  }
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
   network                 = google_compute_network.network.id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
-  deletion_policy         = ""
+
+  # ABANDON: Don't try to delete via Service Networking API (it's buggy)
+  # We delete the peering manually via Compute API in the network's destroy provisioner
+  deletion_policy = "ABANDON"
 }
 
 /* 
