@@ -37,9 +37,14 @@ resource "google_compute_global_address" "private_ip_address" {
 
       # Delete the peering first, before the IP address is deleted
       # The peering uses this IP address range, so it must be deleted first
+      # Extract network name and project from the network ID (format: projects/{project}/global/networks/{network})
+      NETWORK_ID="${self.network}"
+      NETWORK_NAME=$(echo "$NETWORK_ID" | sed 's|.*/networks/||')
+      PROJECT=$(echo "$NETWORK_ID" | sed 's|projects/||; s|/.*||')
+
       gcloud compute networks peerings delete servicenetworking-googleapis-com \
-        --network=${var.network_name} \
-        --project=${var.project} \
+        --network="$NETWORK_NAME" \
+        --project="$PROJECT" \
         --quiet 2>&1 && echo "✓ VPC peering deleted" || echo "Peering already deleted or doesn't exist"
     EOT
   }
