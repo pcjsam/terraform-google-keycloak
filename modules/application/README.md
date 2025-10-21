@@ -109,8 +109,8 @@ module "keycloak_application" {
 
   # Keycloak Configuration
   keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "23.3.3"
-  keycloak_operator_version = "23.3.3"
+  keycloak_crds_version     = "26.4.1"
+  keycloak_operator_version = "26.4.1"
   managed_certificate_host  = "keycloak.example.com"
 }
 ```
@@ -143,8 +143,8 @@ module "keycloak_application" {
 
   # Keycloak Configuration
   keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "23.3.3"
-  keycloak_operator_version = "23.3.3"
+  keycloak_crds_version     = "26.4.1"
+  keycloak_operator_version = "26.4.1"
 
   # SSL & Ingress Configuration
   managed_certificate_host  = "auth.example.com"

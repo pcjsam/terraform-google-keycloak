@@ -215,8 +215,8 @@ module "keycloak_application" {
 
   # Keycloak Configuration
   keycloak_image            = "us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "23.3.3"
-  keycloak_operator_version = "23.3.3"
+  keycloak_crds_version     = "26.4.1"
+  keycloak_operator_version = "26.4.1"
   managed_certificate_host  = "keycloak.example.com"
 
   # Optional: Database Access
@@ -270,8 +270,8 @@ module "keycloak_application" {
 
   # Keycloak Configuration
   keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "23.3.3"
-  keycloak_operator_version = "23.3.3"
+  keycloak_crds_version     = "26.4.1"
+  keycloak_operator_version = "26.4.1"
   managed_certificate_host  = "keycloak.example.com"
 
   # Optional: Database Access
@@ -378,8 +378,8 @@ module "keycloak_application" {
   keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
 
   keycloak_image            = "us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "23.3.3"
-  keycloak_operator_version = "23.3.3"
+  keycloak_crds_version     = "26.4.1"
+  keycloak_operator_version = "26.4.1"
   managed_certificate_host  = "keycloak.example.com"
 }
 ```
