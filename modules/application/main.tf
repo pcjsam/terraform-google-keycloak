@@ -50,7 +50,7 @@ resource "postgresql_grant_role" "keycloak_table_grant" {
   grant_role = "pg_write_all_data"
 }
 
-/* 
+/*
 ** ******************************************************
 ** Keycloak - Keycloak Namespace
 ** ******************************************************
@@ -60,6 +60,49 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
   metadata {
     name = var.keycloak_namespace_name
   }
+
+  timeouts {
+    delete = "10m"
+  }
+}
+
+# Cleanup helper to remove namespace finalizers if stuck during destruction
+resource "terraform_data" "namespace_finalizer_cleanup" {
+  input = var.keycloak_namespace_name
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      echo "Checking if namespace needs finalizer cleanup..."
+
+      # Check if namespace exists and is in Terminating state
+      NAMESPACE_STATUS=$(kubectl get namespace ${self.input} -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+
+      if [ "$NAMESPACE_STATUS" = "Terminating" ]; then
+        echo "Namespace is stuck in Terminating state. Attempting to remove finalizers..."
+
+        # Wait a bit for normal deletion to complete
+        sleep 30
+
+        # Check again
+        NAMESPACE_STATUS=$(kubectl get namespace ${self.input} -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+
+        if [ "$NAMESPACE_STATUS" = "Terminating" ]; then
+          echo "Removing finalizers from namespace..."
+          kubectl get namespace ${self.input} -o json | \
+            jq '.spec.finalizers = []' | \
+            kubectl replace --raw /api/v1/namespaces/${self.input}/finalize -f -
+          echo "Finalizer cleanup complete"
+        else
+          echo "Namespace deleted normally"
+        fi
+      else
+        echo "Namespace already deleted or not in Terminating state"
+      fi
+    EOT
+  }
+
+  depends_on = [kubernetes_namespace_v1.keycloak_namespace]
 }
 
 /* 
