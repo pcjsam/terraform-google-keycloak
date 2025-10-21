@@ -340,7 +340,7 @@ resource "kubernetes_manifest" "frontend_config" {
   depends_on = [kubernetes_manifest.keycloak_instance]
 }
 
-/* 
+/*
 ** ******************************************************
 ** Keycloak - Managed Certificate
 ** ******************************************************
@@ -362,7 +362,7 @@ resource "kubernetes_manifest" "managed_certificate" {
   depends_on = [kubernetes_manifest.keycloak_instance]
 }
 
-/* 
+/*
 ** ******************************************************
 ** Keycloak - Backend Config
 ** ******************************************************
