@@ -73,58 +73,25 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
     }
 
     command = <<-EOF
-      echo "========================================="
-      echo "PROVISIONER IS RUNNING"
-      echo "Namespace: $NAMESPACE"
-      echo "Time: $(date)"
-      echo "========================================="
-
-      # Create a marker file to prove provisioner ran
-      echo "Provisioner ran at $(date) for namespace: $NAMESPACE" > /tmp/terraform-provisioner-debug.txt
-
-      # Start background cleanup with extensive logging
       nohup bash -c '
-        echo "=== Background script started ===" > /tmp/ns-cleanup-$NAMESPACE.log
-        echo "Time: $(date)" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "NAMESPACE variable: $NAMESPACE" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "PID: $$" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "" >> /tmp/ns-cleanup-$NAMESPACE.log
+        for i in {1..36}; do
+          PHASE=$(kubectl get namespace "$NAMESPACE" -o jsonpath="{.status.phase}" 2>/dev/null)
 
-        echo "Sleeping for 30 seconds..." >> /tmp/ns-cleanup-$NAMESPACE.log
-        sleep 30
-
-        echo "" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "=== Woke up after 30s ===" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "Time: $(date)" >> /tmp/ns-cleanup-$NAMESPACE.log
-
-        echo "Checking if namespace exists..." >> /tmp/ns-cleanup-$NAMESPACE.log
-        if kubectl get namespace "$NAMESPACE" > /dev/null 2>&1; then
-          echo "Namespace EXISTS" >> /tmp/ns-cleanup-$NAMESPACE.log
-
-          PHASE=$(kubectl get namespace "$NAMESPACE" -o jsonpath="{.status.phase}" 2>&1)
-          echo "Namespace phase: [$PHASE]" >> /tmp/ns-cleanup-$NAMESPACE.log
-
-          if echo "$PHASE" | grep -q "Terminating"; then
-            echo "Namespace IS in Terminating state - removing finalizers" >> /tmp/ns-cleanup-$NAMESPACE.log
-            kubectl get namespace "$NAMESPACE" -o json | jq ".spec.finalizers = []" | kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - >> /tmp/ns-cleanup-$NAMESPACE.log 2>&1
-            echo "Finalizer removal exit code: $?" >> /tmp/ns-cleanup-$NAMESPACE.log
-          else
-            echo "Namespace NOT in Terminating state (phase: $PHASE)" >> /tmp/ns-cleanup-$NAMESPACE.log
+          if [ -z "$PHASE" ]; then
+            exit 0
           fi
-        else
-          echo "Namespace does NOT exist (already deleted)" >> /tmp/ns-cleanup-$NAMESPACE.log
-        fi
 
-        echo "" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "=== Background script complete ===" >> /tmp/ns-cleanup-$NAMESPACE.log
-        echo "Time: $(date)" >> /tmp/ns-cleanup-$NAMESPACE.log
-      ' &
+          if [ "$PHASE" = "Terminating" ]; then
+            sleep 30
+            if kubectl get namespace "$NAMESPACE" &>/dev/null; then
+              kubectl get namespace "$NAMESPACE" -o json | jq ".spec.finalizers = []" | kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - || true
+            fi
+            exit 0
+          fi
 
-      BG_PID=$!
-      echo "Background cleanup started (PID: $BG_PID)"
-      echo "Monitor with: tail -f /tmp/ns-cleanup-$NAMESPACE.log"
-      echo "========================================="
-
+          sleep 5
+        done
+      ' > /dev/null 2>&1 &
       disown
     EOF
   }
