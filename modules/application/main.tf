@@ -66,16 +66,20 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
   }
 
   provisioner "local-exec" {
-    when    = destroy
+    when = destroy
+
+    environment = {
+      NAMESPACE = self.metadata[0].name
+    }
+
     command = <<-EOF
-      nohup bash -c "
+      nohup bash -c '
         sleep 30
-        if kubectl get namespace '${self.metadata[0].name}' -o jsonpath='{.status.phase}' 2>/dev/null | grep -q Terminating; then
-          kubectl get namespace '${self.metadata[0].name}' -o json | jq '.spec.finalizers = []' | kubectl replace --raw /api/v1/namespaces/${self.metadata[0].name}/finalize -f - || true
+        if kubectl get namespace "$NAMESPACE" -o jsonpath="{.status.phase}" 2>/dev/null | grep -q Terminating; then
+          kubectl get namespace "$NAMESPACE" -o json | jq ".spec.finalizers = []" | kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - || true
         fi
-      " > /dev/null 2>&1 &
+      ' > /dev/null 2>&1 &
       disown
-      echo "Background namespace cleanup started for: ${self.metadata[0].name}"
     EOF
   }
 }
