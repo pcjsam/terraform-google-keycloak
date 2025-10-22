@@ -65,61 +65,126 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
     delete = "10m"
   }
 
-  # Use a provisioner directly on the namespace to handle finalizer cleanup
-  # This runs during the namespace deletion timeout period
+  # Spawn a detached background watcher that monitors and fixes stuck namespace deletion
+  # This must NOT block Terraform, so we use nohup + disown to fully detach
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      set +e  # Don't exit on error
       NAMESPACE="${self.metadata[0].name}"
+      LOGFILE="/tmp/namespace-cleanup-$NAMESPACE.log"
 
       echo "========================================="
-      echo "Namespace Deletion Finalizer Cleanup"
+      echo "Namespace Deletion Monitor"
       echo "Namespace: $NAMESPACE"
+      echo "Log file: $LOGFILE"
       echo "========================================="
+      echo ""
+      echo "Starting background watcher (will NOT block Terraform)..."
+      echo "Monitor progress with: tail -f $LOGFILE"
 
-      # Start a background process to monitor and fix stuck namespace
-      (
-        # Wait for namespace to enter Terminating state
-        echo "[Background] Waiting for namespace to enter Terminating state..."
-        for i in {1..120}; do
-          PHASE=$(kubectl get namespace "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+      # Create a completely detached background script
+      cat > /tmp/namespace-watcher-$NAMESPACE.sh << 'SCRIPT_EOF'
+#!/bin/bash
+NAMESPACE="NAMESPACE_PLACEHOLDER"
+LOGFILE="LOGFILE_PLACEHOLDER"
 
-          if [ "$PHASE" = "NotFound" ] || [ -z "$PHASE" ]; then
-            echo "[Background] Namespace deleted successfully"
-            exit 0
-          fi
+exec >> "$LOGFILE" 2>&1
 
-          if [ "$PHASE" = "Terminating" ]; then
-            echo "[Background] Namespace is Terminating. Waiting 30s before finalizer cleanup..."
-            sleep 30
+echo "========================================="
+echo "Background namespace watcher started"
+echo "PID: $$"
+echo "Namespace: $NAMESPACE"
+echo "========================================="
 
-            # Check if still stuck
-            if kubectl get namespace "$NAMESPACE" &>/dev/null; then
-              echo "[Background] Namespace stuck after 30s. Removing finalizers..."
+echo "Waiting for namespace to enter Terminating state..."
+for i in {1..180}; do
+  PHASE=$(kubectl get namespace "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
 
-              if command -v jq &>/dev/null; then
-                kubectl get namespace "$NAMESPACE" -o json | \
-                  jq '.spec.finalizers = []' | \
-                  kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - &>/dev/null && \
-                  echo "[Background] ✓ Finalizers removed successfully" || \
-                  echo "[Background] ✗ Failed to remove finalizers"
-              else
-                echo "[Background] ✗ jq not installed, cannot remove finalizers"
-              fi
-            else
-              echo "[Background] Namespace deleted successfully (no intervention needed)"
-            fi
-            exit 0
-          fi
+  if [ "$PHASE" = "NotFound" ] || [ -z "$PHASE" ]; then
+    echo "✓ Namespace already deleted (no intervention needed)"
+    exit 0
+  fi
 
-          sleep 1
-        done
-        echo "[Background] Timeout waiting for namespace Terminating state"
-      ) &
+  if [ "$PHASE" = "Terminating" ]; then
+    echo "✓ Namespace entered Terminating state"
+    break
+  fi
 
-      BACKGROUND_PID=$!
-      echo "Started background finalizer cleanup (PID: $BACKGROUND_PID)"
+  if [ $((i % 30)) -eq 0 ]; then
+    echo "Still waiting... (${i}s elapsed, phase: $PHASE)"
+  fi
+
+  sleep 1
+done
+
+if [ "$PHASE" != "Terminating" ]; then
+  echo "⚠ WARNING: Namespace did not enter Terminating state after 3 minutes"
+  echo "Current phase: $PHASE"
+  exit 0
+fi
+
+echo "⏳ Waiting 30 seconds for natural deletion..."
+sleep 30
+
+if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
+  echo "✓ Namespace deleted successfully without intervention"
+  exit 0
+fi
+
+echo "⚠ Namespace still stuck after 30s"
+echo "🔧 Removing finalizers..."
+
+if ! command -v jq &>/dev/null; then
+  echo "✗ ERROR: jq is not installed"
+  echo "Install with: brew install jq"
+  exit 1
+fi
+
+echo "Executing: kubectl get namespace $NAMESPACE -o json | jq '.spec.finalizers = []' | kubectl replace --raw ..."
+if kubectl get namespace "$NAMESPACE" -o json | \
+   jq '.spec.finalizers = []' | \
+   kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - 2>&1; then
+  echo "✓ Finalizers removed successfully"
+else
+  echo "✗ Failed to remove finalizers"
+  exit 1
+fi
+
+echo "⏳ Waiting for namespace deletion to complete..."
+for i in {1..30}; do
+  if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
+    echo "✓ SUCCESS: Namespace deleted successfully"
+    echo "========================================="
+    exit 0
+  fi
+
+  if [ $((i % 5)) -eq 0 ]; then
+    echo "Still deleting... (${i}s elapsed)"
+  fi
+
+  sleep 1
+done
+
+echo "✗ ERROR: Namespace still exists after 30s"
+kubectl get namespace "$NAMESPACE" -o yaml 2>&1
+exit 1
+SCRIPT_EOF
+
+      sed -i.bak "s/NAMESPACE_PLACEHOLDER/$NAMESPACE/g" /tmp/namespace-watcher-$NAMESPACE.sh
+      sed -i.bak "s|LOGFILE_PLACEHOLDER|$LOGFILE|g" /tmp/namespace-watcher-$NAMESPACE.sh
+      chmod +x /tmp/namespace-watcher-$NAMESPACE.sh
+
+      nohup /tmp/namespace-watcher-$NAMESPACE.sh > /dev/null 2>&1 &
+      WATCHER_PID=$!
+      disown
+
+      echo "✓ Background watcher started (PID: $WATCHER_PID)"
+      echo ""
+      echo "The watcher will:"
+      echo "  1. Wait for namespace to enter Terminating state"
+      echo "  2. Wait 30s for natural deletion"
+      echo "  3. If stuck, remove finalizers automatically"
+      echo ""
       echo "========================================="
     EOT
   }
