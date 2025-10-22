@@ -91,70 +91,10 @@ terraform {
 
 ## Usage
 
-### Basic Usage
+For complete usage examples, see the [examples](../../examples) directory:
 
-```hcl
-module "keycloak_application" {
-  source = "./modules/application"
-
-  # Project Configuration
-  project = "my-gcp-project"
-  region  = "us-central1"
-
-  # Infrastructure outputs
-  db_instance_name                      = module.keycloak_infrastructure.cloud_sql_instance_name
-  keycloak_google_service_account_name  = module.keycloak_infrastructure.keycloak_gcp_service_account_name
-  keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
-
-  # Keycloak Configuration
-  keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.4.1"
-  keycloak_operator_version = "26.4.1"
-  managed_certificate_host  = "keycloak.example.com"
-}
-```
-
-### Production Usage
-
-```hcl
-module "keycloak_application" {
-  source = "./modules/application"
-
-  # Project Configuration
-  project = "my-gcp-project"
-  region  = "us-central1"
-
-  # Infrastructure outputs
-  db_instance_name                      = module.keycloak_infrastructure.cloud_sql_instance_name
-  db_name                               = module.keycloak_infrastructure.cloud_sql_database_name
-  keycloak_google_service_account_name  = module.keycloak_infrastructure.keycloak_gcp_service_account_name
-  keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
-
-  # Database Access
-  db_read_users  = ["readonly@example.com", "analyst@example.com"]
-  db_write_users = ["admin@example.com"]
-
-  # Namespace Configuration
-  keycloak_namespace_name = "keycloak-prod"
-
-  # Service Account Configuration
-  keycloak_k8s_service_account_name = "keycloak-prod-ksa"
-
-  # Keycloak Configuration
-  keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.4.1"
-  keycloak_operator_version = "26.4.1"
-
-  # SSL & Ingress Configuration
-  managed_certificate_host  = "auth.example.com"
-  ssl_policy_name          = "keycloak-prod-ssl"
-  frontend_config_name     = "keycloak-prod-frontend"
-  managed_certificate_name = "keycloak-prod-cert"
-  backend_config_name      = "keycloak-prod-backend"
-  ingress_name             = "keycloak-prod-ingress"
-  public_ip_address_name   = "keycloak-prod-ip"
-}
-```
+- [Basic Usage](../../examples/application-basic-usage) - Minimal configuration to deploy Keycloak application
+- [Production Usage](../../examples/application-production-usage) - Production-ready configuration with custom namespace, multiple database users, and enhanced security
 
 ## Variables
 
