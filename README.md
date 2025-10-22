@@ -125,162 +125,35 @@ This means you **cannot** reference module outputs directly in provider configur
 
 ### Deployment Approach
 
-The **two-module architecture solves this problem** by allowing you to deploy infrastructure and application separately. Here's how to handle the deployment:
-
-#### Option 1: Two-Stage Apply with Separate Modules (Recommended)
+The **two-module architecture solves this problem** by allowing you to deploy infrastructure and application separately using targeted applies:
 
 **Stage 1:** Deploy infrastructure module only
 
-```hcl
-# main.tf in your root module
-provider "google" {
-  project = var.project_id
-  region  = var.project_region
-}
-
-module "keycloak_infrastructure" {
-  source = "./modules/infrastructure"
-
-  # Project Configuration
-  project = var.project_id
-  region  = var.project_region
-  number  = var.project_number
-
-  # Keycloak Configuration
-  keycloak_image_project_id = var.project_id
-  keycloak_cluster_name     = "keycloak-cluster"
-
-  # Database Configuration
-  db_instance_name = "keycloak-instance"
-  db_name          = "keycloak"
-
-  # Optional: Database Access
-  db_read_users  = ["user1@example.com"]
-  db_write_users = ["user2@example.com"]
-
-  # SSL Configuration
-  ssl_policy_name = "keycloak-ssl-policy"
-}
-```
-
-Apply stage 1:
-
 ```bash
 terraform init
-terraform apply
+terraform apply -target=module.keycloak_infrastructure
 ```
 
-**Stage 2:** Add application module after infrastructure is ready
-
-```hcl
-# Add to main.tf after stage 1 completes
-
-provider "kubernetes" {
-  host                   = "https://${module.keycloak_infrastructure.keycloak_cluster_endpoint}"
-  token                  = module.keycloak_infrastructure.keycloak_cluster_access_token
-  cluster_ca_certificate = base64decode(module.keycloak_infrastructure.keycloak_cluster_ca_certificate)
-}
-
-provider "kubectl" {
-  host                   = "https://${module.keycloak_infrastructure.keycloak_cluster_endpoint}"
-  token                  = module.keycloak_infrastructure.keycloak_cluster_access_token
-  cluster_ca_certificate = base64decode(module.keycloak_infrastructure.keycloak_cluster_ca_certificate)
-  load_config_file       = false
-}
-
-provider "postgresql" {
-  scheme    = "gcppostgres"
-  host      = module.keycloak_infrastructure.cloud_sql_connection_name
-  username  = module.keycloak_infrastructure.cloud_sql_database_username
-  password  = module.keycloak_infrastructure.cloud_sql_database_password
-  superuser = false
-}
-
-provider "http" {
-  # No configuration required
-}
-
-module "keycloak_application" {
-  source = "./modules/application"
-
-  # Project Configuration
-  project = var.project_id
-  region  = var.project_region
-
-  # Infrastructure outputs
-  db_instance_name                      = module.keycloak_infrastructure.cloud_sql_instance_name
-  db_name                               = module.keycloak_infrastructure.cloud_sql_database_name
-  keycloak_google_service_account_name  = "projects/${var.project_id}/serviceAccounts/${module.keycloak_infrastructure.keycloak_gcp_service_account_email}"
-  keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
-
-  # Keycloak Configuration
-  keycloak_image            = "us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.4.1"
-  keycloak_operator_version = "26.4.1"
-  managed_certificate_host  = "keycloak.example.com"
-
-  # Optional: Database Access
-  db_read_users  = ["user1@example.com"]
-  db_write_users = ["user2@example.com"]
-}
-```
-
-Apply stage 2:
+**Stage 2:** Deploy application module after infrastructure is ready
 
 ```bash
 terraform apply
 ```
+
+For a complete working example with all provider configurations and module setup, see the [Complete Example](examples/complete-example/).
 
 ## Usage Examples
 
-### Basic Usage
+For a complete working example that demonstrates deploying both modules together, see:
 
-```hcl
-# Infrastructure Module
-module "keycloak_infrastructure" {
-  source = "./modules/infrastructure"
+- [Complete Example](examples/complete-example/) - Full deployment with infrastructure and application modules
 
-  # Project Configuration
-  project = "my-gcp-project"
-  region  = "us-central1"
-  number  = "123456789012"
+For individual module examples, see:
 
-  # Keycloak Configuration
-  keycloak_image_project_id = "my-gcp-project"
+- [Infrastructure Module Examples](examples/) - Basic and production infrastructure configurations
+- [Application Module Examples](examples/) - Basic and production application configurations
 
-  # Optional: Database Configuration
-  db_tier              = "db-perf-optimized-N-2"
-  db_edition           = "ENTERPRISE_PLUS"
-  db_availability_type = "REGIONAL"
-}
-
-# Application Module (deploy after infrastructure)
-module "keycloak_application" {
-  source = "./modules/application"
-
-  # Project Configuration
-  project = "my-gcp-project"
-  region  = "us-central1"
-
-  # Infrastructure outputs
-  db_instance_name                      = module.keycloak_infrastructure.cloud_sql_instance_name
-  db_name                               = module.keycloak_infrastructure.cloud_sql_database_name
-  keycloak_google_service_account_name  = "projects/my-gcp-project/serviceAccounts/${module.keycloak_infrastructure.keycloak_gcp_service_account_email}"
-  keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
-
-  # Keycloak Configuration
-  keycloak_image            = "us-central1-docker.pkg.dev/my-gcp-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.4.1"
-  keycloak_operator_version = "26.4.1"
-  managed_certificate_host  = "keycloak.example.com"
-
-  # Optional: Database Access
-  db_read_users  = ["user1@example.com"]
-  db_write_users = ["user2@example.com"]
-}
-```
-
-For complete configuration examples and all available options, see:
+For detailed configuration options and all available variables, see:
 
 - [Infrastructure Module README](modules/infrastructure/README.md)
 - [Application Module README](modules/application/README.md)
@@ -294,123 +167,23 @@ For detailed information about variables and outputs for each module, please ref
 
 ## Deployment Steps
 
-### 1. Enable Required APIs
+For a complete step-by-step deployment guide with working example code, see the [Complete Example](examples/complete-example/).
 
-First, ensure all required Google Cloud APIs are enabled in your GCP project.
+### Quick Start
 
-### 2. Build and Push Keycloak Image
+1. **Enable Required APIs**: Ensure all required Google Cloud APIs are enabled in your GCP project
 
-Build and push your Keycloak image to Artifact Registry or Container Registry:
+2. **Build and Push Keycloak Image**: Build and push your Keycloak image to Artifact Registry
 
-```bash
-docker build -t us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4 .
-docker push us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4
-```
+3. **Deploy Infrastructure Module**: Deploy the infrastructure module first to create VPC, Cloud SQL, and GKE cluster
 
-### 3. Deploy Infrastructure Module
+4. **Deploy Application Module**: After infrastructure is ready, deploy the application module to install Keycloak
 
-**Create `main.tf` in your root module:**
+5. **Configure DNS**: Point your domain to the ingress IP address
 
-```hcl
-provider "google" {
-  project = var.project_id
-  region  = var.project_region
-}
+6. **Wait for Certificate**: Google-managed certificates can take up to 1 hour to provision
 
-module "keycloak_infrastructure" {
-  source = "./modules/infrastructure"
-
-  project = var.project_id
-  region  = var.project_region
-  number  = var.project_number
-
-  keycloak_image_project_id = var.project_id
-  managed_certificate_host  = "keycloak.example.com"
-}
-```
-
-Initialize and apply to create VPC, Cloud SQL, and GKE cluster:
-
-```bash
-terraform init
-terraform apply
-```
-
-### 4. Deploy Application Module
-
-After infrastructure is ready, add the application module to your `main.tf`:
-
-```hcl
-provider "kubernetes" {
-  host                   = "https://${module.keycloak_infrastructure.keycloak_cluster_endpoint}"
-  token                  = module.keycloak_infrastructure.keycloak_cluster_access_token
-  cluster_ca_certificate = base64decode(module.keycloak_infrastructure.keycloak_cluster_ca_certificate)
-}
-
-provider "kubectl" {
-  host                   = "https://${module.keycloak_infrastructure.keycloak_cluster_endpoint}"
-  token                  = module.keycloak_infrastructure.keycloak_cluster_access_token
-  cluster_ca_certificate = base64decode(module.keycloak_infrastructure.keycloak_cluster_ca_certificate)
-  load_config_file       = false
-}
-
-provider "postgresql" {
-  scheme    = "gcppostgres"
-  host      = module.keycloak_infrastructure.cloud_sql_connection_name
-  username  = module.keycloak_infrastructure.cloud_sql_database_username
-  password  = module.keycloak_infrastructure.cloud_sql_database_password
-  superuser = false
-}
-
-provider "http" {
-  # No configuration required
-}
-
-module "keycloak_application" {
-  source = "./modules/application"
-
-  project = var.project_id
-  region  = var.project_region
-
-  db_instance_name                      = module.keycloak_infrastructure.cloud_sql_instance_name
-  db_name                               = module.keycloak_infrastructure.cloud_sql_database_name
-  keycloak_google_service_account_name  = "projects/${var.project_id}/serviceAccounts/${module.keycloak_infrastructure.keycloak_gcp_service_account_email}"
-  keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
-
-  keycloak_image            = "us-central1-docker.pkg.dev/your-project/keycloak/keycloak:26.4"
-  keycloak_crds_version     = "26.4.1"
-  keycloak_operator_version = "26.4.1"
-  managed_certificate_host  = "keycloak.example.com"
-}
-```
-
-Apply to deploy Keycloak and all Kubernetes resources:
-
-```bash
-terraform apply
-```
-
-### 5. Configure DNS
-
-After deployment, get the public IP address and configure your DNS:
-
-```bash
-terraform output -raw keycloak_ingress_public_ip
-```
-
-Create an A record pointing your domain (e.g., `keycloak.example.com`) to the output IP address.
-
-### 6. Wait for Certificate Provisioning
-
-Google-managed certificates can take up to 15 minutes to provision. Monitor the certificate status:
-
-```bash
-gcloud container clusters get-credentials keycloak-cluster \
-  --region=us-central1 \
-  --project=your-project-id
-
-kubectl get managedcertificate -n keycloak
-```
+For detailed instructions, configuration options, and troubleshooting, see the [Complete Example](examples/complete-example/).
 
 ## How It Works
 
