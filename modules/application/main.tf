@@ -64,64 +64,128 @@ resource "kubernetes_namespace_v1" "keycloak_namespace" {
   timeouts {
     delete = "2m"
   }
-
-  lifecycle {
-    # This ensures the cleanup helper runs BEFORE namespace deletion starts
-    # During destruction, Terraform destroys in reverse dependency order
-    create_before_destroy = false
-  }
 }
 
-# Cleanup helper to forcefully remove namespace if stuck during destruction
-# This runs BEFORE the namespace resource is destroyed (due to dependency chain)
+# This resource handles stuck namespace deletion in GKE Autopilot
+# It runs AFTER all namespace resources are destroyed but BEFORE the namespace itself
+# This is critical because GKE Autopilot often has broken metrics-server APIService
+# which causes namespace deletions to hang indefinitely
 resource "terraform_data" "namespace_finalizer_cleanup" {
-  # Trigger on namespace name to recreate if namespace changes
-  input = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
+  # Use the variable directly instead of referencing the namespace resource
+  # This prevents creating a dependency on the namespace resource itself
+  input = var.keycloak_namespace_name
 
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
+      set -e  # Exit on error to fail fast if something goes wrong
       NAMESPACE="${self.input}"
-      echo "Starting namespace cleanup for: $NAMESPACE"
 
-      # Wait for Terraform to attempt normal deletion
-      echo "Waiting 90 seconds for normal Kubernetes namespace deletion..."
-      sleep 90
+      echo "========================================="
+      echo "Namespace Finalizer Cleanup Starting"
+      echo "Namespace: $NAMESPACE"
+      echo "========================================="
+
+      # Check if namespace exists
+      if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
+        echo "✓ Namespace does not exist - nothing to clean up"
+        exit 0
+      fi
+
+      echo "⏳ Namespace exists. Waiting for Terraform to initiate namespace deletion..."
+
+      # Wait for namespace to enter Terminating state (up to 60 seconds)
+      NAMESPACE_TERMINATING=false
+      for i in {1..60}; do
+        PHASE=$(kubectl get namespace "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+
+        if [ "$PHASE" = "NotFound" ] || [ -z "$PHASE" ]; then
+          echo "✓ Namespace was deleted successfully"
+          exit 0
+        fi
+
+        if [ "$PHASE" = "Terminating" ]; then
+          echo "✓ Namespace entered Terminating state"
+          NAMESPACE_TERMINATING=true
+          break
+        fi
+
+        if [ $i -eq 60 ]; then
+          echo "⚠ WARNING: Namespace did not enter Terminating state after 60s"
+          echo "⚠ Current phase: $PHASE"
+          echo "⚠ This is unusual but proceeding anyway..."
+        fi
+
+        sleep 1
+      done
+
+      # Wait 10 seconds to give Kubernetes a chance to complete deletion naturally
+      echo "⏳ Waiting 10 seconds for natural namespace deletion..."
+      sleep 10
 
       # Check if namespace still exists
-      if kubectl get namespace "$NAMESPACE" &>/dev/null; then
-        echo "Namespace still exists after 90s. Checking status..."
-
-        NAMESPACE_STATUS=$(kubectl get namespace "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-        echo "Namespace status: $NAMESPACE_STATUS"
-
-        if [ "$NAMESPACE_STATUS" = "Terminating" ]; then
-          echo "Namespace stuck in Terminating state. Removing finalizers..."
-
-          # Remove the kubernetes finalizer that's preventing deletion
-          kubectl patch namespace "$NAMESPACE" \
-            --type json \
-            --patch='[{"op": "remove", "path": "/spec/finalizers"}]' 2>/dev/null || true
-
-          echo "Finalizer cleanup complete"
-
-          # Wait a bit for namespace to actually delete
-          sleep 5
-
-          # Final check
-          if kubectl get namespace "$NAMESPACE" &>/dev/null; then
-            echo "WARNING: Namespace still exists after finalizer removal"
-          else
-            echo "SUCCESS: Namespace deleted successfully"
-          fi
-        else
-          echo "Namespace deleted normally"
-        fi
-      else
-        echo "Namespace already deleted"
+      if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
+        echo "✓ Namespace deleted successfully without intervention"
+        exit 0
       fi
+
+      echo "⚠ Namespace still exists after 10s - likely stuck due to finalizers"
+      echo "🔧 Removing namespace finalizers to force deletion..."
+
+      # Check if jq is available
+      if ! command -v jq &>/dev/null; then
+        echo "✗ ERROR: jq is not installed and is required for this operation"
+        echo "✗ Please install jq: https://stedolan.github.io/jq/download/"
+        exit 1
+      fi
+
+      # Remove finalizers using the /finalize API endpoint
+      # This is the same command that works manually
+      if kubectl get namespace "$NAMESPACE" -o json | \
+         jq '.spec.finalizers = []' | \
+         kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - &>/dev/null; then
+        echo "✓ Finalizers removed successfully"
+      else
+        echo "✗ Failed to remove finalizers via /finalize endpoint"
+        exit 1
+      fi
+
+      # Wait for namespace to be deleted (up to 30 seconds)
+      echo "⏳ Waiting for namespace deletion to complete..."
+      for i in {1..30}; do
+        if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
+          echo "✓ SUCCESS: Namespace deleted successfully"
+          echo "========================================="
+          exit 0
+        fi
+        sleep 1
+      done
+
+      # If we get here, the namespace still exists after finalizer removal
+      echo "✗ ERROR: Namespace still exists after 30s despite finalizer removal"
+      kubectl get namespace "$NAMESPACE" -o yaml 2>/dev/null || true
+      exit 1
     EOT
   }
+
+  # CRITICAL: This resource depends on ALL resources that live in the namespace
+  # During destroy, Terraform destroys in reverse dependency order:
+  # 1. First: All these resources below get destroyed
+  # 2. Then: This terraform_data resource gets destroyed (destroy provisioner runs)
+  # 3. Finally: The namespace resource gets destroyed
+  depends_on = [
+    kubernetes_service_account_v1.keycloak_ksa,
+    google_service_account_iam_member.keycloak_ksa_iam,
+    kubectl_manifest.keycloak_operator,
+    terraform_data.wait_for_crds,
+    kubernetes_manifest.keycloak_bootstrap_admin_secret,
+    kubernetes_manifest.keycloak_db_secret,
+    kubectl_manifest.keycloak_instance,
+    kubernetes_manifest.frontend_config,
+    kubernetes_manifest.managed_certificate,
+    kubernetes_manifest.backend_config,
+    kubernetes_ingress_v1.ingress,
+  ]
 }
 
 /* 
