@@ -103,7 +103,6 @@ module "keycloak_application" {
 
   # Infrastructure outputs
   db_instance_name                      = module.keycloak_infrastructure.cloud_sql_instance_name
-  db_name                               = module.keycloak_infrastructure.cloud_sql_database_name
   keycloak_google_service_account_name  = module.keycloak_infrastructure.keycloak_gcp_service_account_name
   keycloak_google_service_account_email = module.keycloak_infrastructure.keycloak_gcp_service_account_email
 
@@ -339,7 +338,7 @@ The module uses IAM authentication for database access:
 
 ### Certificate Provisioning
 
-Google-managed certificates can take up to 15 minutes to provision:
+Google-managed certificates can take up to 1 hour to provision:
 
 1. DNS must be configured before certificate provisioning
 2. Create an A record pointing to the static IP
@@ -389,6 +388,40 @@ After deployment:
 5. **Login with admin credentials**:
    - Username: `admin`
    - Password: `admin` (change immediately!)
+
+## Deleting the Application Module
+
+**IMPORTANT**: Due to a behavior in GCP's GKE Autopilot, the application module requires a special deletion procedure to ensure clean resource removal. The Kubernetes namespace resource includes a destroy-time provisioner that removes finalizers from resources, which is necessary for proper cleanup in Autopilot clusters.
+
+### Why Special Deletion is Required
+
+GKE Autopilot may exhibit unexpected behavior when deleting certain Kubernetes resources.
+
+This provisioner **only executes** when using the destroy command.
+
+### Proper Deletion Procedure
+
+To properly delete the application module, you **must** use a Terraform destroy command:
+
+```bash
+terraform destroy -target='module.keycloak_application'
+```
+
+Or perform a full destroy:
+
+```bash
+terraform destroy
+```
+
+### Manual Cleanup (If Needed)
+
+If you accidentally destroyed resources without the destroy command and encounter stuck resources:
+
+**Remove finalizers from Keycloak resources**:
+
+```bash
+  kubectl get namespace "$NAMESPACE" -o json | jq ".spec.finalizers = []" | kubectl replace --raw /api/v1/namespaces/$NAMESPACE/finalize -f - || true
+```
 
 ## Troubleshooting
 
@@ -509,14 +542,3 @@ If Workload Identity is not working:
    - Keep operator version in sync with CRDs
    - Monitor operator logs during updates
    - Have rollback plan ready
-
-## Version Compatibility
-
-This module is tested with:
-
-- **Terraform**: >= 1.9.8
-- **Keycloak Operator**: 23.3.3
-- **Keycloak**: 26.4
-- **Cloud SQL Proxy**: 2.14.1
-- **GKE**: Autopilot clusters
-- **PostgreSQL**: 17
