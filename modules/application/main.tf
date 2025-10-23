@@ -190,8 +190,14 @@ data "http" "keycloak_operator" {
   url = "https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/${var.keycloak_operator_version}/kubernetes/kubernetes.yml"
 }
 
+data "kubectl_file_documents" "keycloak_operator_docs" {
+  content = data.http.keycloak_operator.response_body
+}
+
 resource "kubectl_manifest" "keycloak_operator" {
-  yaml_body = data.http.keycloak_operator.response_body
+  for_each = data.kubectl_file_documents.keycloak_operator_docs.manifests
+
+  yaml_body = each.value
 
   override_namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
 
