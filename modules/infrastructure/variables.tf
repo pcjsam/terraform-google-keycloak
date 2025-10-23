@@ -365,6 +365,7 @@ variable "keycloak_google_service_account_roles" {
   description = "Set of IAM roles to assign to the Keycloak GCP service account"
   default = [
     "roles/cloudsql.client",
+    "roles/cloudsql.instanceUser",
     "roles/iam.serviceAccountUser",
     "roles/compute.networkUser",
   ]
