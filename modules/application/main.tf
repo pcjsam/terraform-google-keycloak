@@ -249,6 +249,31 @@ resource "kubernetes_manifest" "keycloak_db_secret" {
 
 /*
 ** ******************************************************
+** Keycloak - Backend Config
+** ******************************************************
+*/
+
+resource "kubernetes_manifest" "backend_config" {
+  manifest = {
+    apiVersion = "cloud.google.com/v1"
+    kind       = "BackendConfig"
+    metadata = {
+      name      = var.backend_config_name
+      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
+    }
+    spec = {
+      healthCheck = {
+        requestPath = "/health/ready"
+        port        = 9000
+        type        = "HTTP"
+      }
+    }
+  }
+}
+
+
+/*
+** ******************************************************
 ** Keycloak - Instance
 ** ******************************************************
 */
@@ -391,32 +416,6 @@ resource "kubernetes_manifest" "managed_certificate" {
     }
     spec = {
       domains = [var.managed_certificate_host]
-    }
-  }
-
-  depends_on = [kubectl_manifest.keycloak_instance]
-}
-
-/*
-** ******************************************************
-** Keycloak - Backend Config
-** ******************************************************
-*/
-
-resource "kubernetes_manifest" "backend_config" {
-  manifest = {
-    apiVersion = "cloud.google.com/v1"
-    kind       = "BackendConfig"
-    metadata = {
-      name      = var.backend_config_name
-      namespace = kubernetes_namespace_v1.keycloak_namespace.metadata[0].name
-    }
-    spec = {
-      healthCheck = {
-        requestPath = "/health/ready"
-        port        = 9000
-        type        = "HTTP"
-      }
     }
   }
 
