@@ -193,11 +193,21 @@ locals {
   keycloak_image_project_roles = [
     "roles/artifactregistry.reader",
   ]
+  cluster_roles = [
+    "roles/container.defaultNodeServiceAccount",
+  ]
 }
 
-resource "google_project_iam_member" "compute_engine_default_service_account_iam_development" {
+resource "google_project_iam_member" "compute_engine_default_service_account_iam_keycloak_image_project_roles" {
   for_each = toset(local.keycloak_image_project_roles)
   project  = var.keycloak_image_project_id
+  role     = each.key
+  member   = "serviceAccount:${var.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "compute_engine_default_service_account_iam_cluster_roles" {
+  for_each = toset(local.cluster_roles)
+  project  = var.project
   role     = each.key
   member   = "serviceAccount:${var.number}-compute@developer.gserviceaccount.com"
 }
