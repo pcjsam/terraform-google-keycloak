@@ -160,19 +160,32 @@ resource "google_sql_user" "postgresql_user" {
 ** Database - Writers and readers
 ** ******************************************************
 */
-
-resource "google_project_iam_member" "cloud_sql_accessors" {
-  for_each = setunion(var.db_read_users, var.db_write_users)
-  project  = var.project
-  member   = "user:${each.value}"
-  role     = "roles/cloudsql.client"
+locals {
+  writers_readers_roles = [
+    "roles/cloudsql.client",
+    "roles/cloudsql.instanceUser",
+  ]
+  write_readers_roles_map = {
+    for pair in flatten([
+      for user in setunion(var.db_read_users, var.db_write_users) : [
+        for role in local.writers_readers_roles : {
+          key  = "${user}-${role}"
+          user = user
+          role = role
+        }
+      ]
+      ]) : pair.key => {
+      user = pair.user
+      role = pair.role
+    }
+  }
 }
 
-resource "google_project_iam_member" "cloud_sql_instance_users" {
-  for_each = setunion(var.db_read_users, var.db_write_users)
+resource "google_project_iam_member" "write_readers_roles" {
+  for_each = local.write_readers_roles_map
   project  = var.project
-  member   = "user:${each.value}"
-  role     = "roles/cloudsql.instanceUser"
+  member   = "user:${each.value.user}"
+  role     = each.value.role
 }
 
 resource "google_sql_user" "postgresql_users" {
